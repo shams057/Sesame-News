@@ -217,3 +217,35 @@ Follow these steps to run the user application on a physical Android device:
    > ⚠️ **Note:** The initial build process may take **30 to 60 minutes** as it compiles native Android files. Subsequent runs will be significantly faster.
 
 5. Once the build finishes, open the app on your phone.
+
+---
+
+### Alternatively you can run on Web
+
+No phone, USB cable, or ADB is required for this option.
+
+1. Open a **new terminal window** and navigate to the user app directory:
+   ```bash
+   cd sesame-user
+   ```
+2. Install the project dependencies (if setting up for the first time):
+   ```bash
+   npm install
+   ```
+3. Install the web dependencies required by Expo (first time only):
+   ```bash
+   npx expo install react-dom react-native-web @expo/metro-runtime
+   ```
+4. Start the app in the browser:
+   ```bash
+   npx expo start --web
+   ```
+   Alternatively, run `npx expo start` and press **`w`** in the terminal to open the web version.
+5. Your browser should open automatically. If it doesn't, go to:
+   ```http
+   http://localhost:8081
+   ```
+
+> 💡 **Note:** The web version connects directly to the backend on `http://localhost:3000`, so `adb reverse` is **not** needed. If API requests fail in the browser, make sure the backend allows cross-origin requests (CORS) from `http://localhost:8081`.
+
+---
