@@ -22,7 +22,7 @@ export default function Dashboard() {
     switch (activeNav) {
       case 'news':         return <NewsPage />;
       case 'users':        return <UsersPage />;
-      case 'ticket-stats': return <TicketStatsPage />;
+      case 'ticket-stats': return <TicketStatsPage onNavigate={setActiveNav} />;
       case 'tickets':      return <TicketsPage />;
       default:             return <NewsPage />;
     }
@@ -49,20 +49,21 @@ export default function Dashboard() {
           overflow: 'hidden',
         }}
       >
-        {/* Page header */}
-        <div style={s.pageHeader}>
-          <h1 style={s.pageTitle}>{PAGE_TITLES[activeNav]}</h1>
-          <div style={s.headerMeta}>
-            <span style={s.headerDate}>
-              {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-            </span>
-          </div>
-        </div>
-
-        {/* Page content */}
-        <div style={{ animation: 'fadeIn 0.2s ease' }}>
-          {renderContent()}
-        </div>
+        {activeNav === 'ticket-stats' ? (
+          renderContent()
+        ) : (
+          <>
+            <div style={s.pageHeader}>
+              <h1 style={s.pageTitle}>{PAGE_TITLES[activeNav]}</h1>
+              <div style={s.headerMeta}>
+                <span style={s.headerDate}>
+                  {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                </span>
+              </div>
+            </div>
+            <div style={{ animation: 'fadeIn 0.2s ease' }}>{renderContent()}</div>
+          </>
+        )}
       </main>
     </div>
   );

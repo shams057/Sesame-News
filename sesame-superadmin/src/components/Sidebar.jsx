@@ -279,12 +279,12 @@ const s = {
   navItem: {
     display: 'flex',
     alignItems: 'center',
-    gap: 11,
+    gap: 10,
     padding: '11px 0',
-    paddingRight: 12,
+    paddingRight: 10,
     borderRadius: 9,
     background: 'transparent',
-    fontSize: 13.5,
+    fontSize: 13,
     fontWeight: 500,
     border: 'none',
     cursor: 'pointer',
@@ -298,7 +298,7 @@ const s = {
   navItemActive: {
     background: 'rgba(59,130,246,0.18)',
   },
-  navIcon: { flexShrink: 0, display: 'flex', alignItems: 'center', width: 44, justifyContent: 'center' },
+  navIcon: { flexShrink: 0, display: 'flex', alignItems: 'center', width: 34, justifyContent: 'center' },
   navLabel: { flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' },
   activePip: {
     width: 5,
