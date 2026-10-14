@@ -136,15 +136,15 @@ const PERIOD_DATA = {
     ],
     chart: {
       title: 'Flux Horaire de la Journée',
-      description: 'Tickets reçus vs Tickets clôturés par tranche horaire',
-      receivedTotal: '47',
+      description: 'Tickets non résolus vs Tickets résolus par tranche horaire',
+      unresolvedTotal: '5',
       resolvedTotal: '42',
       bars: [
-        ['08h-10h', 45, 38, 7, 6],
-        ['10h-12h', 90, 80, 15, 13],
-        ['12h-14h', 55, 48, 9, 8],
-        ['14h-16h', 75, 68, 12, 11],
-        ['16h-18h', 25, 25, 4, 4],
+        ['08h-10h', 15, 85, 1, 6],
+        ['10h-12h', 25, 87, 2, 13],
+        ['12h-14h', 12, 88, 1, 8],
+        ['14h-16h', 10, 92, 1, 11],
+        ['16h-18h', 0, 100, 0, 4],
       ],
       note: 'Pic d’activité constaté entre 10h et 12h (pause matinale et accueil guichet scolarité).',
       capacityNote: 'Capacité de traitement moyenne : ~6 tickets/heure',
@@ -175,17 +175,17 @@ const PERIOD_DATA = {
     ],
     chart: {
       title: 'Évolution Quotidienne (7 derniers jours)',
-      description: 'Tickets enregistrés vs clôturés chaque jour',
-      receivedTotal: '318',
+      description: 'Tickets non résolus vs Tickets résolus chaque jour',
+      unresolvedTotal: '42',
       resolvedTotal: '276',
       bars: [
-        ['Mer', 65, 58, 45, 40],
-        ['Jeu', 82, 74, 57, 51],
-        ['Ven', 70, 62, 49, 43],
-        ['Sam', 22, 20, 15, 14],
-        ['Dim', 14, 12, 10, 8],
-        ['Lun', 95, 80, 66, 56],
-        ['Mar', 85, 78, 59, 54],
+        ['Mer', 18, 82, 5, 40],
+        ['Jeu', 22, 78, 6, 51],
+        ['Ven', 20, 80, 6, 43],
+        ['Sam', 10, 90, 1, 14],
+        ['Dim', 15, 85, 2, 8],
+        ['Lun', 35, 65, 10, 56],
+        ['Mar', 25, 75, 5, 54],
       ],
       note: 'Forte baisse le week-end, puis rebond d’activité le lundi matin dès la reprise.',
       capacityNote: 'Capacité de traitement moyenne : ~45 tickets/jour',
@@ -216,16 +216,16 @@ const PERIOD_DATA = {
     ],
     chart: {
       title: 'Évolution Hebdomadaire du Flux',
-      description: 'Comparaison dynamique : Réclamations reçues vs Tickets clôturés sur les 4 semaines',
-      receivedTotal: '1 428',
+      description: 'Comparaison dynamique : Tickets non résolus vs Tickets résolus sur les 4 semaines',
+      unresolvedTotal: '220',
       resolvedTotal: '1 208',
       bars: [
-        ['Semaine 1', 82, 72, '330', '280'],
-        ['Semaine 2', 89, 80, '356', '310'],
-        ['Semaine 3', 93, 79, '372', '308'],
-        ['Semaine 4', 92, 80, '370', '310'],
+        ['Semaine 1', 30, 70, '50', '280'],
+        ['Semaine 2', 28, 72, '46', '310'],
+        ['Semaine 3', 38, 62, '64', '308'],
+        ['Semaine 4', 35, 65, '60', '310'],
       ],
-      note: 'Répartition des tickets reçus et clôturés sur les quatre semaines de la période sélectionnée.',
+      note: 'Répartition des tickets non résolus et résolus sur les quatre semaines de la période sélectionnée.',
       capacityNote: 'Capacité de traitement moyenne : ~42 tickets/jour',
     },
     departments: DEPARTMENTS,
@@ -240,16 +240,16 @@ const PERIOD_DATA = {
     ],
     chart: {
       title: 'Flux Mensuel du Semestre 1',
-      description: 'Suivi mensuel des réclamations et résolutions de Septembre à Février',
-      receivedTotal: '5 240',
+      description: 'Suivi mensuel des tickets non résolus vs résolus de Septembre à Février',
+      unresolvedTotal: '619',
       resolvedTotal: '4 621',
       bars: [
-        ['Sept.', 85, 72, '1 120', '950'],
-        ['Oct.', 100, 88, '1 315', '1 157'],
-        ['Nov.', 75, 68, '985', '890'],
-        ['Déc.', 55, 50, '720', '655'],
-        ['Janv.', 65, 60, '850', '785'],
-        ['Févr.', 50, 48, '650', '624'],
+        ['Sept.', 30, 70, '170', '950'],
+        ['Oct.', 35, 65, '158', '1 157'],
+        ['Nov.', 25, 75, '95', '890'],
+        ['Déc.', 20, 80, '65', '655'],
+        ['Janv.', 22, 78, '65', '785'],
+        ['Févr.', 18, 82, '26', '624'],
       ],
       note: 'Concentration majeure en début de semestre (septembre/octobre) avant stabilisation rapide.',
       capacityNote: 'Capacité moyenne semestrielle : ~48 tickets/jour',
@@ -280,20 +280,20 @@ const PERIOD_DATA = {
     ],
     chart: {
       title: 'Flux Annuel Global (2026-2027)',
-      description: 'Historique mensuel complet des tickets sur l’année académique',
-      receivedTotal: '9 850',
+      description: 'Historique mensuel complet des tickets non résolus vs résolus',
+      unresolvedTotal: '936',
       resolvedTotal: '8 914',
       bars: [
-        ['Sept.', 80, 70, '1 120', '980'],
-        ['Oct.', 98, 86, '1 380', '1 210'],
-        ['Nov.', 74, 66, '1 040', '930'],
-        ['Déc.', 54, 50, '760', '700'],
-        ['Janv.', 68, 62, '950', '870'],
-        ['Févr.', 58, 54, '810', '755'],
-        ['Mars', 72, 68, '1 010', '950'],
-        ['Avr.', 65, 62, '910', '870'],
-        ['Mai', 60, 57, '840', '800'],
-        ['Juin', 75, 71, '1 050', '995'],
+        ['Sept.', 28, 72, '140', '980'],
+        ['Oct.', 32, 68, '170', '1 210'],
+        ['Nov.', 24, 76, '110', '930'],
+        ['Déc.', 16, 84, '60', '700'],
+        ['Janv.', 20, 80, '80', '870'],
+        ['Févr.', 14, 86, '55', '755'],
+        ['Mars', 12, 88, '60', '950'],
+        ['Avr.', 10, 90, '40', '870'],
+        ['Mai', 10, 90, '40', '800'],
+        ['Juin', 12, 88, '55', '995'],
       ],
       note: 'Performance record de résolution observée au second semestre grâce aux nouveaux workflows d’automatisation.',
       capacityNote: 'Capacité globale annuelle : ~52 tickets/jour ouvré',
@@ -504,16 +504,18 @@ export default function TicketStatsPage({ onNavigate }) {
     doc.setFont('helvetica', 'normal');
     doc.text(currentPeriodData.chart.description, margin, y + 5);
 
+    const RED = [220, 38, 38];
+
     // Legend
-    const legendX = pageW - margin - 65;
-    doc.setFillColor(...BLUE);
+    const legendX = pageW - margin - 80;
+    doc.setFillColor(...RED);
     doc.rect(legendX, y - 3, 4, 4, 'F');
     doc.setFontSize(7);
     doc.setTextColor(...DARK);
-    doc.text(`Reçus (${formatReportNumber(currentPeriodData.chart.receivedTotal)})`, legendX + 6, y);
+    doc.text(`Non résolus (${formatReportNumber(currentPeriodData.chart.unresolvedTotal)})`, legendX + 6, y);
     doc.setFillColor(...GREEN_D);
-    doc.rect(legendX + 34, y - 3, 4, 4, 'F');
-    doc.text(`Résolus (${formatReportNumber(currentPeriodData.chart.resolvedTotal)})`, legendX + 40, y);
+    doc.rect(legendX + 42, y - 3, 4, 4, 'F');
+    doc.text(`Résolus (${formatReportNumber(currentPeriodData.chart.resolvedTotal)})`, legendX + 48, y);
     y += 10;
 
     const chartH = 38;
@@ -524,17 +526,17 @@ export default function TicketStatsPage({ onNavigate }) {
     doc.setDrawColor(220, 228, 240);
     doc.line(margin, y + chartH, margin + barAreaW, y + chartH);
 
-    currentPeriodData.chart.bars.forEach(([label, received, resolved, receivedTip, resolvedTip], i) => {
+    currentPeriodData.chart.bars.forEach(([label, unresolved, resolved, unresolvedTip, resolvedTip], i) => {
       const cx = margin + 5 + i * groupW + groupW / 2;
       const barW = groupW * 0.25;
-      // Received bar
-      const rH = (received / 100) * chartH;
-      doc.setFillColor(...BLUE);
+      // Unresolved bar (red)
+      const rH = (unresolved / 100) * chartH;
+      doc.setFillColor(...RED);
       doc.roundedRect(cx - barW - 0.5, y + chartH - rH, barW, rH, 1, 1, 'F');
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7.5);
-      doc.setTextColor(...BLUE);
-      doc.text(formatReportNumber(receivedTip), cx - barW / 2 - 0.5, y + chartH - rH - 2, { align: 'center' });
+      doc.setTextColor(...RED);
+      doc.text(formatReportNumber(unresolvedTip), cx - barW / 2 - 0.5, y + chartH - rH - 2, { align: 'center' });
       // Resolved bar
       const sH = (resolved / 100) * chartH;
       doc.setFillColor(...GREEN_D);
@@ -557,23 +559,20 @@ export default function TicketStatsPage({ onNavigate }) {
 
     // ─── Flow summary (compact) ────────────────────────────────────
     const toCount = (value) => Number(String(value).replace(/[^\d]/g, '')) || 0;
-    const totalReceived = toCount(currentPeriodData.chart.receivedTotal);
+    const totalUnresolved = toCount(currentPeriodData.chart.unresolvedTotal);
     const totalResolved = toCount(currentPeriodData.chart.resolvedTotal);
-    const totalPending = Math.max(totalReceived - totalResolved, 0);
-    const totalRate = totalReceived > 0 ? `${((totalResolved / totalReceived) * 100).toFixed(1)}%` : '—';
+    const totalRate = (totalUnresolved + totalResolved) > 0 ? `${((totalResolved / (totalUnresolved + totalResolved)) * 100).toFixed(1)}%` : '—';
 
     doc.setFillColor(235, 242, 255);
     doc.roundedRect(margin, y, contentW, 12, 2, 2, 'F');
     doc.setFontSize(8);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...DARK);
-    doc.text(`Reçus : ${totalReceived.toLocaleString('en-US')}`, margin + 5, y + 7.5);
     doc.setTextColor(...GREEN_D);
-    doc.text(`Résolus : ${totalResolved.toLocaleString('en-US')}`, margin + 50, y + 7.5);
-    doc.setTextColor(180, 83, 9);
-    doc.text(`En attente : ${totalPending.toLocaleString('en-US')}`, margin + 100, y + 7.5);
+    doc.text(`Résolus : ${totalResolved.toLocaleString('en-US')}`, margin + 5, y + 7.5);
+    doc.setTextColor(220, 38, 38);
+    doc.text(`Non résolus : ${totalUnresolved.toLocaleString('en-US')}`, margin + 50, y + 7.5);
     doc.setTextColor(...BLUE);
-    doc.text(`Taux résolution : ${totalRate}`, margin + 140, y + 7.5);
+    doc.text(`Taux résolution : ${totalRate}`, margin + 110, y + 7.5);
     y += 18;
 
     // ─── Department table ──────────────────────────────────────────
@@ -763,14 +762,14 @@ export default function TicketStatsPage({ onNavigate }) {
                 title={currentPeriodData.chart.title}
                 description={currentPeriodData.chart.description}
                 chartLegend
-                chartReceivedLabel={`Reçus (${currentPeriodData.chart.receivedTotal})`}
+                chartUnresolvedLabel={`Non résolus (${currentPeriodData.chart.unresolvedTotal})`}
                 chartResolvedLabel={`Résolus (${currentPeriodData.chart.resolvedTotal})`}
               />
               <div className="bar-chart">
-                {currentPeriodData.chart.bars.map(([label, received, resolved, recTip, resTip]) => (
+                {currentPeriodData.chart.bars.map(([label, unresolved, resolved, unrTip, resTip]) => (
                   <div className="bar-group" key={label}>
                     <div className="bars">
-                      <span className="received-bar bar-hover" style={{ height: `${received}%` }} data-tip={`${recTip} reçus`} />
+                      <span className="received-bar bar-hover" style={{ height: `${unresolved}%` }} data-tip={`${unrTip} non résolus`} />
                       <span className="resolved-bar bar-hover" style={{ height: `${resolved}%` }} data-tip={`${resTip} résolus`} />
                     </div>
                     <span>{label}</span>
@@ -837,14 +836,14 @@ export default function TicketStatsPage({ onNavigate }) {
   );
 }
 
-function PanelHeader({ title, description, legend = false, chartLegend = false, chartReceivedLabel, chartResolvedLabel }) {
+function PanelHeader({ title, description, legend = false, chartLegend = false, chartUnresolvedLabel, chartResolvedLabel }) {
   return (
     <div className="panel-header">
       <div><h2>{title}</h2><p className="panel-description">{description}</p></div>
       {legend && <div className="legend"><span><i className="blue-dot" />Volume</span><span><i className="green-dot" />Résolution</span></div>}
       {chartLegend && (
         <div className="legend">
-          <span><i className="blue-dot" />{chartReceivedLabel || 'Reçus (1 428)'}</span>
+          <span><i className="red-dot" />{chartUnresolvedLabel || 'Non résolus (220)'}</span>
           <span><i className="green-dot" />{chartResolvedLabel || 'Résolus (1 208)'}</span>
         </div>
       )}
