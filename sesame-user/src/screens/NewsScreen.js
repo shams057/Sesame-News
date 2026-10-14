@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
 import NewsCard from '../components/NewsCard';
+import NewTicketModal from '../components/NewTicketModal';
 import { colors, LOGO_URL } from '../theme/colors';
 
 export default function NewsScreen() {
@@ -27,6 +28,7 @@ export default function NewsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
+  const [ticketModalVisible, setTicketModalVisible] = useState(false);
 
   const fetchNews = useCallback(
     async (pageNum = 0, append = false) => {
@@ -152,6 +154,22 @@ export default function NewsScreen() {
           ) : null
         }
       />
+
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Créer un ticket"
+        onPress={() => setTicketModalVisible(true)}
+        style={styles.ticketFab}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.ticketFabText}>+</Text>
+      </TouchableOpacity>
+
+      <NewTicketModal
+        visible={ticketModalVisible}
+        token={token}
+        onClose={() => setTicketModalVisible(false)}
+      />
     </View>
   );
 }
@@ -242,5 +260,27 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 8,
     fontSize: 13,
+  },
+  ticketFab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    elevation: 7,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.24,
+    shadowRadius: 5,
+  },
+  ticketFabText: {
+    color: colors.white,
+    fontSize: 34,
+    lineHeight: 38,
+    fontWeight: '400',
   },
 });
