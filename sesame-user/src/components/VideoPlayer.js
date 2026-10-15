@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -8,14 +8,16 @@ import {
   Dimensions,
 } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { colors } from '../theme/colors';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 export default function VideoPlayer({ uri }) {
-  const [fullscreen, setFullscreen] = useState(false);
-
   if (!uri) return null;
+  return <VideoPlayerContent uri={uri} />;
+}
+
+function VideoPlayerContent({ uri }) {
+  const [fullscreen, setFullscreen] = useState(false);
 
   const encoded = encodeURI(uri);
 
@@ -38,8 +40,8 @@ export default function VideoPlayer({ uri }) {
         <VideoView
           player={player}
           style={styles.video}
-          contentFit="cover"
-          nativeControls={false}
+           contentFit="contain"
+           nativeControls
         />
         {!player.playing && (
           <View style={styles.overlay}>
@@ -100,7 +102,8 @@ const styles = StyleSheet.create({
   },
   video: {
     width: '100%',
-    height: 200,
+    aspectRatio: 16 / 9,
+    maxHeight: 360,
     backgroundColor: '#000',
   },
   overlay: {

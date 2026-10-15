@@ -7,20 +7,14 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Image,
-  StatusBar,
-  Platform,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
 import NewsCard from '../components/NewsCard';
-import NewTicketModal from '../components/NewTicketModal';
-import { colors, LOGO_URL } from '../theme/colors';
+import { colors } from '../theme/colors';
 
 export default function NewsScreen() {
-  const { user, logout, token } = useAuth();
-  const insets = useSafeAreaInsets();
+  const { user, token } = useAuth();
   const [news, setNews] = useState([]);
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -28,7 +22,6 @@ export default function NewsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
-  const [ticketModalVisible, setTicketModalVisible] = useState(false);
 
   const fetchNews = useCallback(
     async (pageNum = 0, append = false) => {
@@ -61,11 +54,12 @@ export default function NewsScreen() {
         setLoadingMore(false);
       }
     },
-    [user?.id, token]
+    [user, token]
   );
 
   useEffect(() => {
-    fetchNews(0, false);
+    const timeout = setTimeout(() => fetchNews(0, false), 0);
+    return () => clearTimeout(timeout);
   }, [fetchNews]);
 
   const onRefresh = () => {
@@ -81,10 +75,6 @@ export default function NewsScreen() {
     fetchNews(page + 1, true);
   };
 
-  const handleLogout = async () => {
-    await logout();
-  };
-
   if (loading) {
     return (
       <View style={styles.center}>
@@ -95,25 +85,6 @@ export default function NewsScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={colors.primaryDark} />
-
-      {/* Header with notch inset safety */}
-      <View style={[styles.header, { paddingTop: Math.max(insets.top + 12, Platform.OS === 'android' ? 44 : 20) }]}>
-        <View style={styles.headerLeft}>
-          <Image source={{ uri: LOGO_URL }} style={styles.logo} />
-          <View>
-            <Text style={styles.headerTitle}>Actualités</Text>
-            <Text style={styles.headerSub}>
-              {user?.firstname} {user?.lastname}
-            </Text>
-          </View>
-        </View>
-
-        <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
-          <Text style={styles.logoutText}>Quitter</Text>
-        </TouchableOpacity>
-      </View>
-
       {error ? (
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>{error}</Text>
@@ -155,21 +126,6 @@ export default function NewsScreen() {
         }
       />
 
-      <TouchableOpacity
-        accessibilityRole="button"
-        accessibilityLabel="Créer un ticket"
-        onPress={() => setTicketModalVisible(true)}
-        style={styles.ticketFab}
-        activeOpacity={0.85}
-      >
-        <Text style={styles.ticketFabText}>+</Text>
-      </TouchableOpacity>
-
-      <NewTicketModal
-        visible={ticketModalVisible}
-        token={token}
-        onClose={() => setTicketModalVisible(false)}
-      />
     </View>
   );
 }
@@ -184,48 +140,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: colors.bg,
-  },
-  header: {
-    backgroundColor: colors.primaryDark,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  logo: {
-    width: 40,
-    height: 40,
-    resizeMode: 'contain',
-    tintColor: '#fff',
-  },
-  headerTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  headerSub: {
-    color: colors.secondary,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  logoutBtn: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
-  logoutText: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 13,
-    fontWeight: '600',
   },
   list: {
     padding: 16,
@@ -260,27 +174,5 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 8,
     fontSize: 13,
-  },
-  ticketFab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 20,
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
-    elevation: 7,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.24,
-    shadowRadius: 5,
-  },
-  ticketFabText: {
-    color: colors.white,
-    fontSize: 34,
-    lineHeight: 38,
-    fontWeight: '400',
   },
 });

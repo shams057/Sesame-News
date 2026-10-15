@@ -2,6 +2,7 @@ const express=require('express')
 const route=express.Router() 
 const db=require('./../models')
 const bcrypt = require('bcrypt');
+const multer = require('multer');
 
 const { Op } = require('sequelize');
 
@@ -9,6 +10,7 @@ const { QueryTypes } = require('sequelize');
 const config = require('./../config/config.json');
 const { Sequelize } = require('sequelize');
 const sequelize = new Sequelize(config.development);
+const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 
 
@@ -53,6 +55,27 @@ route.get('/users',async (req,res,next)=>{
         next(error);
     }
 })
+
+route.post('/users/import-csv', csvUpload.single('file'), async (req, res, next) => {
+    if (!req.file) return res.status(400).json({ error: 'Fichier CSV requis' });
+    try {
+        const lines = req.file.buffer.toString('utf8').replace(/^\uFEFF/, '').split(/\r?\n/).filter(Boolean);
+        if (lines.length < 2) return res.status(400).json({ error: 'Le CSV ne contient aucun utilisateur' });
+        const headers = lines.shift().split(',').map((value) => value.trim().toLowerCase());
+        const skipped = []; let imported = 0;
+        for (const line of lines) {
+            const values = line.split(',').map((value) => value.trim().replace(/^"|"$/g, ''));
+            const row = Object.fromEntries(headers.map((header, index) => [header, values[index] || '']));
+            if (!row.firstname || !row.lastname || !row.login || !row.password || await db.user.findOne({ where: { login: row.login } })) {
+                skipped.push(row.login || line); continue;
+            }
+            await db.user.create({ firstname: row.firstname, lastname: row.lastname, login: row.login,
+                password: await bcrypt.hash(row.password, 10), GC: ['true', '1', 'oui'].includes(row.gc?.toLowerCase()), categorieId: row.categorieid || null });
+            imported += 1;
+        }
+        res.status(201).json({ imported, skipped });
+    } catch (error) { next(error); }
+});
 
 
 route.put('/user/:id', async(req,res,next)=>{

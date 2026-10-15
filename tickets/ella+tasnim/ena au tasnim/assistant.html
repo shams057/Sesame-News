@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Assistant IA – SESAME</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body data-page="assistant">
+
+  <aside id="zone-sidebar"></aside>
+
+  <div class="contenu">
+    <div id="zone-topbar"></div>
+
+    <main class="page page-assistant">
+
+      <!-- Colonne principale : titre + conversation -->
+      <div class="colonne-principale">
+        <div class="entete-page">
+          <div class="titre-icone">
+            <span class="gros-icone">
+              <svg class="icone" viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="4" y="8" width="16" height="11" rx="3" />
+                <path d="M12 8V4M9 13h.01M15 13h.01M9 16.5h6" />
+                <circle cx="12" cy="3.5" r="1" />
+              </svg>
+            </span>
+            <div>
+              <h1>Assistant IA</h1>
+              <p class="sous-titre">Posez vos questions, nous sommes là pour vous aider ! (assistant de démonstration)
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <section class="carte chat" aria-label="Conversation avec l'assistant">
+          <div class="messages" id="messages" aria-live="polite"></div>
+          <form class="saisie" id="form-chat" autocomplete="off">
+            <input type="text" id="champ-question" placeholder="Écrivez votre question ici…" aria-label="Votre question"
+              maxlength="300">
+            <button type="submit" class="btn" aria-label="Envoyer la question">
+              <svg class="icone" viewBox="0 0 24 24">
+                <path d="M22 2L11 13" />
+                <path d="M22 2l-7 20-4-9-9-4 20-7z" />
+              </svg>
+            </button>
+          </form>
+        </section>
+      </div>
+
+      <!-- Questions fréquentes + aide -->
+      <aside aria-label="Questions fréquentes">
+        <div class="carte">
+          <h2 class="faq-tete">
+            <svg class="icone" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />
+              <path d="M19 16l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z" />
+            </svg>
+            Questions fréquentes
+          </h2>
+          <div class="faq-liste" id="faq-liste"></div>
+
+          <div class="aide-carte">
+            <svg class="icone" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="4" y="8" width="16" height="11" rx="3" />
+              <path d="M12 8V4M9 13h.01M15 13h.01M9 16.5h6" />
+              <circle cx="12" cy="3.5" r="1" />
+            </svg>
+            <div>
+              <strong>Besoin d'aide supplémentaire ?</strong>
+              <p>Vous pouvez déposer une demande auprès de l'administration via « Mes tickets ».</p>
+              <a href="tickets.html" class="btn-contour">Contacter l'administration</a>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <script src="script.js"></script>
+</body>
+
+</html>
