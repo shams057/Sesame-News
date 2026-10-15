@@ -3,393 +3,165 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import {
   ActivityIndicator,
-  View,
-  TouchableOpacity,
-  Text,
-  StyleSheet,
-  Platform,
-  useWindowDimensions,
   Image,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import LoginScreen from './src/screens/LoginScreen';
 import NewsScreen from './src/screens/NewsScreen';
 import ChatScreen from './src/screens/ChatScreen';
+import TicketsScreen from './src/screens/TicketsScreen';
 import { colors, LOGO_URL } from './src/theme/colors';
 
 const Stack = createNativeStackNavigator();
 
-/* ─── Mobile View Navigator (Android / iOS / Mobile Web) ────────────────── */
-function MainTabNavigator() {
+function NavigationIcon({ name, active }) {
+  const glyph = name === 'news' ? '▤' : name === 'tickets' ? '▣' : '◌';
+  return <Text style={[styles.navIcon, active && styles.navIconActive]}>{glyph}</Text>;
+}
+
+function ChatPopup({ visible, onClose, desktop }) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={[styles.chatOverlay, desktop && styles.chatOverlayDesktop]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Fermer le chat" onPress={onClose} style={StyleSheet.absoluteFill} />
+        <View style={[styles.chatPopup, desktop && styles.chatPopupDesktop]}>
+          <ChatScreen compact onClose={onClose} />
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function UserAppLayout({ desktop }) {
   const [activeTab, setActiveTab] = useState('news');
-  const insets = useSafeAreaInsets();
-
-  return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      {/* Active Screen */}
-      <View style={{ flex: 1 }}>
-        {activeTab === 'news' ? <NewsScreen /> : <ChatScreen />}
-      </View>
-
-      {/* Mobile Bottom Navigation Bar */}
-      <View style={[styles.bottomBarWrapper, { paddingBottom: Math.max(insets.bottom, 6) }]}>
-        <View style={styles.bottomBar}>
-          <TouchableOpacity
-            style={[styles.tabItem, activeTab === 'news' && styles.tabItemActive]}
-            onPress={() => setActiveTab('news')}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.tabIcon, activeTab === 'news' && styles.tabIconActive]}>
-              📰
-            </Text>
-            <Text style={[styles.tabLabel, activeTab === 'news' && styles.tabLabelActive]}>
-              Actualités
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tabItem, activeTab === 'chat' && styles.tabItemActive]}
-            onPress={() => setActiveTab('chat')}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.tabIcon, activeTab === 'chat' && styles.tabIconActive]}>
-              🤖
-            </Text>
-            <Text style={[styles.tabLabel, activeTab === 'chat' && styles.tabLabelActive]}>
-              Assistant IA
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-/* ─── Desktop Web View Layout (Computers & Large Screens) ──────────────── */
-function DesktopWebLayout() {
-  const [activeTab, setActiveTab] = useState('news'); // 'news' | 'chat' | 'split'
+  const [chatVisible, setChatVisible] = useState(false);
   const { user, logout } = useAuth();
+  const insets = useSafeAreaInsets();
+  const activeTitle = activeTab === 'news' ? 'Actualités' : 'Mes tickets';
+  const currentScreen = activeTab === 'news'
+    ? <NewsScreen showHeader={false} />
+    : <TicketsScreen />;
 
   return (
-    <View style={styles.desktopWrapper}>
-      {/* Top Navbar Header */}
-      <header style={styles.desktopHeader}>
-        <View style={styles.desktopNavInner}>
-          {/* Brand Logo & Title */}
-          <View style={styles.desktopBrandRow}>
+    <View style={styles.appRoot}>
+      {desktop ? (
+        <View style={styles.desktopLayout}>
+          <View style={styles.desktopSideNav}>
             <Image source={{ uri: LOGO_URL }} style={styles.desktopLogo} />
-            <View>
-              <Text style={styles.desktopBrandTitle}>Université SESAME</Text>
-              <Text style={styles.desktopBrandSub}>Espace Étudiant Web</Text>
+            <Text style={styles.sideTitle}>SESAME</Text>
+            {['news', 'tickets'].map((tab) => (
+              <TouchableOpacity key={tab} onPress={() => setActiveTab(tab)} style={[styles.sideItem, activeTab === tab && styles.sideItemActive]}>
+                <NavigationIcon name={tab} active={activeTab === tab} />
+                <Text style={styles.sideItemText}>{tab === 'news' ? 'Actualités' : 'Mes tickets'}</Text>
+              </TouchableOpacity>
+            ))}
+            <View style={styles.sideUser}>
+              <Text numberOfLines={1} style={styles.sideUserName}>{user?.firstname} {user?.lastname}</Text>
+              <TouchableOpacity onPress={logout} style={styles.sideLogout}><Text style={styles.sideItemText}>Déconnexion</Text></TouchableOpacity>
             </View>
           </View>
-
-          {/* Nav Tabs */}
-          <View style={styles.desktopNavTabs}>
-            <TouchableOpacity
-              style={[styles.desktopTabBtn, activeTab === 'news' && styles.desktopTabBtnActive]}
-              onPress={() => setActiveTab('news')}
-            >
-              <Text style={[styles.desktopTabText, activeTab === 'news' && styles.desktopTabTextActive]}>
-                📰 Actualités & Fil
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.desktopTabBtn, activeTab === 'chat' && styles.desktopTabBtnActive]}
-              onPress={() => setActiveTab('chat')}
-            >
-              <Text style={[styles.desktopTabText, activeTab === 'chat' && styles.desktopTabTextActive]}>
-                🤖 Assistant IA (RAG)
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.desktopTabBtn, activeTab === 'split' && styles.desktopTabBtnActive]}
-              onPress={() => setActiveTab('split')}
-            >
-              <Text style={[styles.desktopTabText, activeTab === 'split' && styles.desktopTabTextActive]}>
-                🖥️ Vue Duale
-              </Text>
+          <View style={styles.desktopContent}>{currentScreen}</View>
+        </View>
+      ) : (
+        <View style={styles.mobileLayout}>
+          <View style={[styles.mobileHeader, { paddingTop: Math.max(insets.top, 12) }]}>
+            <Image source={{ uri: LOGO_URL }} style={styles.mobileLogo} />
+            <View style={styles.mobileHeaderCopy}>
+              <Text style={styles.mobileHeaderTitle}>{activeTitle}</Text>
+              <Text style={styles.mobileHeaderSub}>{user?.firstname} {user?.lastname}</Text>
+            </View>
+            <TouchableOpacity accessibilityRole="button" onPress={logout} style={styles.mobileLogout}>
+              <Text style={styles.mobileLogoutText}>Quitter</Text>
             </TouchableOpacity>
           </View>
-
-          {/* User Profile & Logout */}
-          <View style={styles.desktopUserRow}>
-            <View style={{ alignItems: 'flex-end', marginRight: 12 }}>
-              <Text style={styles.desktopUserName}>
-                {user?.firstname} {user?.lastname}
-              </Text>
-              <Text style={styles.desktopUserTag}>Étudiant Connecté</Text>
+          <View style={styles.mobileContent}>{currentScreen}</View>
+          <View style={[styles.bottomBarWrapper, { paddingBottom: Math.max(insets.bottom, 6) }]}>
+            <View style={styles.bottomBar}>
+              {['news', 'tickets'].map((tab) => (
+                <TouchableOpacity key={tab} accessibilityRole="button" accessibilityState={{ selected: activeTab === tab }} style={[styles.tabItem, activeTab === tab && styles.tabItemActive]} onPress={() => setActiveTab(tab)}>
+                  <NavigationIcon name={tab} active={activeTab === tab} />
+                  <Text style={[styles.tabLabel, activeTab === tab && styles.tabLabelActive]}>{tab === 'news' ? 'Actualités' : 'Tickets'}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
-            <TouchableOpacity onPress={logout} style={styles.desktopLogoutBtn}>
-              <Text style={styles.desktopLogoutText}>Déconnexion</Text>
-            </TouchableOpacity>
           </View>
         </View>
-      </header>
+      )}
 
-      {/* Main Content Body */}
-      <View style={styles.desktopMainBody}>
-        {activeTab === 'news' && (
-          <View style={styles.desktopSingleCard}>
-            <NewsScreen />
-          </View>
-        )}
-
-        {activeTab === 'chat' && (
-          <View style={styles.desktopSingleCard}>
-            <ChatScreen />
-          </View>
-        )}
-
-        {activeTab === 'split' && (
-          <View style={styles.desktopSplitGrid}>
-            <View style={styles.desktopLeftCol}>
-              <NewsScreen />
-            </View>
-            <View style={styles.desktopRightCol}>
-              <ChatScreen />
-            </View>
-          </View>
-        )}
-      </View>
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Ouvrir l’assistant IA"
+        onPress={() => setChatVisible(true)}
+        activeOpacity={0.85}
+        style={[styles.chatFab, !desktop && { bottom: 82 + Math.max(insets.bottom, 6) }]}
+      >
+        <Text style={styles.chatFabGlyph}>＋</Text>
+      </TouchableOpacity>
+      <ChatPopup visible={chatVisible} onClose={() => setChatVisible(false)} desktop={desktop} />
     </View>
   );
 }
 
-/* ─── Root Navigator ────────────────────────────────────────────────────── */
 function RootNavigator() {
   const { isAuthenticated, loading } = useAuth();
   const { width } = useWindowDimensions();
+  const desktop = Platform.OS === 'web' && width >= 768;
 
-  // Desktop check: Only on Web browsers with screen width >= 768px
-  const isDesktopWeb = Platform.OS === 'web' && width >= 768;
-
-  if (loading) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: colors.bg,
-        }}
-      >
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
-
+  if (loading) return <View style={styles.loading}><ActivityIndicator size="large" color={colors.primary} /></View>;
   if (!isAuthenticated) {
-    return (
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="Login" component={LoginScreen} />
-      </Stack.Navigator>
-    );
+    return <Stack.Navigator screenOptions={{ headerShown: false }}><Stack.Screen name="Login" component={LoginScreen} /></Stack.Navigator>;
   }
-
-  // If authenticated: desktop layout on PC browsers, mobile layout on phones & native app
-  return isDesktopWeb ? <DesktopWebLayout /> : <MainTabNavigator />;
+  return <UserAppLayout desktop={desktop} />;
 }
 
 export default function App() {
-  return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <NavigationContainer>
-          <RootNavigator />
-        </NavigationContainer>
-      </AuthProvider>
-    </SafeAreaProvider>
-  );
+  return <SafeAreaProvider><AuthProvider><NavigationContainer><RootNavigator /></NavigationContainer></AuthProvider></SafeAreaProvider>;
 }
 
 const styles = StyleSheet.create({
-  // Mobile Bottom Bar
-  bottomBarWrapper: {
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 8,
-  },
-  bottomBar: {
-    flexDirection: 'row',
-    height: 56,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'space-around',
-  },
-  tabItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 5,
-    borderRadius: 12,
-    marginHorizontal: 8,
-  },
-  tabItemActive: {
-    backgroundColor: '#EFF6FF',
-  },
-  tabIcon: {
-    fontSize: 18,
-    opacity: 0.6,
-  },
-  tabIconActive: {
-    opacity: 1,
-  },
-  tabLabel: {
-    fontSize: 11.5,
-    fontWeight: '600',
-    color: colors.textSoft,
-    marginTop: 2,
-  },
-  tabLabelActive: {
-    color: colors.primary,
-    fontWeight: '700',
-  },
-
-  // Desktop Web Styles
-  desktopWrapper: {
-    flex: 1,
-    backgroundColor: '#F1F5F9',
-    minHeight: '100vh',
-  },
-  desktopHeader: {
-    backgroundColor: colors.primaryDark,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-  },
-  desktopNavInner: {
-    maxWidth: 1400,
-    marginHorizontal: 'auto',
-    paddingHorizontal: 24,
-    height: 68,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  desktopBrandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  desktopLogo: {
-    width: 36,
-    height: 36,
-    resizeMode: 'contain',
-    tintColor: '#FFFFFF',
-  },
-  desktopBrandTitle: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  desktopBrandSub: {
-    color: colors.secondary,
-    fontSize: 11,
-  },
-  desktopNavTabs: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    padding: 4,
-    borderRadius: 12,
-    gap: 4,
-  },
-  desktopTabBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  desktopTabBtnActive: {
-    backgroundColor: colors.primary,
-    boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
-  },
-  desktopTabText: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 13.5,
-    fontWeight: '600',
-  },
-  desktopTabTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  desktopUserRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  desktopUserName: {
-    color: '#FFFFFF',
-    fontSize: 13.5,
-    fontWeight: '600',
-  },
-  desktopUserTag: {
-    color: '#94A3B8',
-    fontSize: 11,
-  },
-  desktopLogoutBtn: {
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 8,
-  },
-  desktopLogoutText: {
-    color: '#FCA5A5',
-    fontSize: 12.5,
-    fontWeight: '600',
-  },
-
-  desktopMainBody: {
-    flex: 1,
-    maxWidth: 1400,
-    width: '100%',
-    marginHorizontal: 'auto',
-    padding: 24,
-  },
-  desktopSingleCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.border,
-    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.05)',
-    maxWidth: 900,
-    marginHorizontal: 'auto',
-    width: '100%',
-    minHeight: 700,
-  },
-  desktopSplitGrid: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: 24,
-    minHeight: 720,
-  },
-  desktopLeftCol: {
-    flex: 1.2,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.border,
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
-  },
-  desktopRightCol: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.border,
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
-  },
+  appRoot: { flex: 1, backgroundColor: colors.bg },
+  loading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg },
+  desktopLayout: { flex: 1, flexDirection: 'row', backgroundColor: '#F1F5F9' },
+  desktopSideNav: { width: 220, flexShrink: 0, backgroundColor: colors.primaryDark, padding: 22, zIndex: 2 },
+  desktopLogo: { width: 48, height: 48, resizeMode: 'contain', tintColor: '#fff', marginBottom: 12 },
+  sideTitle: { color: '#fff', fontWeight: '800', fontSize: 18, marginBottom: 20 },
+  sideItem: { minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, borderRadius: 9, marginBottom: 6 },
+  sideItemActive: { backgroundColor: colors.primary },
+  sideItemText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  sideUser: { marginTop: 'auto', paddingTop: 20 },
+  sideUserName: { color: '#dbeafe', fontSize: 12, marginBottom: 8 },
+  sideLogout: { paddingVertical: 12 },
+  desktopContent: { flex: 1, minWidth: 0, minHeight: '100vh' },
+  mobileLayout: { flex: 1, backgroundColor: colors.bg },
+  mobileHeader: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingBottom: 10, backgroundColor: colors.primaryDark },
+  mobileLogo: { width: 38, height: 38, resizeMode: 'contain', tintColor: '#fff' },
+  mobileHeaderCopy: { flex: 1 },
+  mobileHeaderTitle: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  mobileHeaderSub: { color: colors.secondary, fontSize: 11, marginTop: 2 },
+  mobileLogout: { paddingHorizontal: 11, paddingVertical: 7, borderRadius: 9, backgroundColor: 'rgba(255,255,255,0.12)' },
+  mobileLogoutText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  mobileContent: { flex: 1, minHeight: 0 },
+  bottomBarWrapper: { backgroundColor: 'rgba(255,255,255,0.88)', borderTopWidth: 1, borderTopColor: colors.border, shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 8 },
+  bottomBar: { height: 58, flexDirection: 'row', paddingHorizontal: 18, alignItems: 'center', justifyContent: 'space-around' },
+  tabItem: { flex: 1, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 13, marginHorizontal: 6 },
+  tabItemActive: { backgroundColor: '#EFF6FF' },
+  navIcon: { fontSize: 19, color: '#64748B', fontWeight: '700' },
+  navIconActive: { color: colors.primary },
+  tabLabel: { fontSize: 11, fontWeight: '600', color: colors.textSoft, marginTop: 1 },
+  tabLabelActive: { color: colors.primary, fontWeight: '700' },
+  chatFab: { position: 'absolute', right: 20, bottom: 22, width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.23, shadowRadius: 7, zIndex: 5 },
+  chatFabGlyph: { color: '#fff', fontSize: 31, lineHeight: 36, fontWeight: '400' },
+  chatOverlay: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', paddingHorizontal: 12, paddingBottom: 12, backgroundColor: 'rgba(15,23,42,0.34)' },
+  chatOverlayDesktop: { alignItems: 'flex-end', justifyContent: 'flex-end', padding: 24 },
+  chatPopup: { width: '100%', height: '76%', maxHeight: 650, maxWidth: 460, overflow: 'hidden', borderRadius: 18, backgroundColor: '#fff', elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.22, shadowRadius: 18 },
+  chatPopupDesktop: { height: 620 },
 });

@@ -9,6 +9,7 @@ export default function UsersPage() {
   const [editing, setEditing] = useState(null);
   const [categories, setCategories] = useState([]);
   const [msg, setMsg] = useState('');
+  const [csvFile, setCsvFile] = useState(null);
   const [form, setForm] = useState({
     firstname: '',
     lastname: '',
@@ -98,6 +99,18 @@ export default function UsersPage() {
     }
   };
 
+  const importCsv = async () => {
+    if (!csvFile) return;
+    const data = new FormData();
+    data.append('file', csvFile);
+    try {
+      const response = await api.post('/users/import-csv', data);
+      setMsg(`${response.data.imported} utilisateur(s) importé(s).`);
+      setCsvFile(null);
+      await load();
+    } catch (error) { setMsg(error.response?.data?.error || 'Erreur lors de l’import CSV'); }
+  };
+
   return (
     <div>
       <div style={styles.top}>
@@ -105,6 +118,10 @@ export default function UsersPage() {
         <button onClick={openCreate} style={styles.primaryBtn}>
           + Nouvel utilisateur
         </button>
+        <label style={styles.importBtn}>Importer CSV
+          <input type="file" accept=".csv,text/csv" onChange={(e) => setCsvFile(e.target.files?.[0] || null)} hidden />
+        </label>
+        {csvFile && <button onClick={importCsv} style={styles.editBtn}>Importer {csvFile.name}</button>}
       </div>
 
       {msg && <p style={styles.msg}>{msg}</p>}
@@ -349,4 +366,5 @@ const styles = {
     borderRadius: 12,
     fontSize: 14,
   },
+  importBtn: { background: '#ecfeff', color: '#0e7490', padding: '11px 20px', borderRadius: 12, fontSize: 14, cursor: 'pointer' },
 };

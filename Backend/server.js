@@ -44,6 +44,7 @@ app.use((req,res,next)=>{
 var port=3000;
 db.sequelize
   .sync({ force: false })
+  .then(() => db.ticket.sync({ alter: true }))
   .then(() => {
     app.listen(port, () => {
       console.log(`Serveur listening on port ${port}`);

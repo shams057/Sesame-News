@@ -1,0 +1,41 @@
+#!/bin/sh
+
+# Base path
+BASE_DIR="$HOME/Documents/certix/app/ProjetNewsSesame_2/ProjetNewsSesame"
+
+# 1. Ask for Front-User mode (Web or Mobile)
+echo "----------------------------------------"
+echo "Select Front-User Mode:"
+echo "1) Web (npx expo start --web)"
+echo "2) Mobile (adb reverse, expo run:android, scrcpy)"
+echo "----------------------------------------"
+read -p "Enter choice [1 or 2]: " MODE_CHOICE
+
+# 2. Environment Setup (XAMPP / Apache)
+echo "--- Starting XAMPP & Stopping Default Apache ---"
+cd ~
+sudo /opt/lampp/lampp start
+sudo systemctl stop apache2
+sudo /opt/lampp/lampp restart
+
+# 3. Handle Mobile Setup if chosen
+USER_CMD="npx expo start --web"
+if [ "$MODE_CHOICE" = "2" ]; then
+    USER_CMD="npx expo run:android"
+    
+    # Configure ADB reverse port forwarding
+    echo "--- Configuring ADB Reverse (TCP 3000) ---"
+    adb reverse tcp:3000 tcp:3000
+    
+    # Launch scrcpy in a separate terminal tab
+    gnome-terminal --tab --title="scrcpy" -- sh -c "scrcpy; exec sh"
+fi
+
+# 4. Launch Backend in a NEW Gnome Terminal Window
+gnome-terminal --title="Backend" --working-directory="$BASE_DIR/Backend" -- sh -c "node server.js; exec sh"
+
+# 5. Launch Superadmin & User Frontends as TABS in the SAME Window
+gnome-terminal --tab --title="Front-SuperAdmin" --working-directory="$BASE_DIR/sesame-superadmin" -- sh -c "npm run dev; exec sh"
+gnome-terminal --tab --title="Front-User" --working-directory="$BASE_DIR/sesame-user" -- sh -c "$USER_CMD; exec sh"
+
+echo "All services successfully launched in terminal tabs!"

@@ -25,6 +25,18 @@ module.exports = (sequelize, Datatype) => {
       type: Datatype.DATE,
       allowNull: true,
     },
+    userId: {
+      type: Datatype.INTEGER,
+      allowNull: true,
+    },
   });
+
+  ticket.associate = (models) => {
+    ticket.belongsTo(models.user, {
+      foreignKey: 'userId',
+      onDelete: 'SET NULL',
+    });
+  };
+
   return ticket;
 };

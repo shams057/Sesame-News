@@ -59,17 +59,17 @@ function guessMime(filename = '') {
 }
 
 export default function NewsCard({ item }) {
-  const [expanded, setExpanded] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
+  const [imageAspectRatio, setImageAspectRatio] = useState(null);
+  const [downloading, setDownloading] = useState(false);
 
   const fileUrl = buildUrl(item.path);
   const showImage = isImage(item.path);
   const showVideo = isVideo(item.path);
   const showFileLink = item.path && !showImage && !showVideo;
-  const isLong = (item.description || '').length > 120;
-
   const handleShare = async () => {
+    if (sharing) return;
     const text = `${item.titre}\n\n${item.description || ''}`.trim();
 
     if (!fileUrl) {
@@ -109,7 +109,7 @@ export default function NewsCard({ item }) {
       } else {
         await Share.share({ message: text, title: item.titre });
       }
-    } catch (e) {
+    } catch (_error) {
       Alert.alert(
         'Partage fichier impossible',
         'Le texte va être partagé.'
@@ -143,6 +143,24 @@ export default function NewsCard({ item }) {
     }
   };
 
+  const downloadFile = async () => {
+    if (!fileUrl || downloading) return;
+    setDownloading(true);
+    try {
+      const directory = FileSystem.documentDirectory || FileSystem.cacheDirectory;
+      if (!directory) throw new Error('No local directory');
+      const filename = item.path?.split('/').pop() || `news_${item.id}.bin`;
+      const result = await FileSystem.downloadAsync(fileUrl, `${directory}${filename}`);
+      if (result.status !== 200) throw new Error(`HTTP ${result.status}`);
+      if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(result.uri, { mimeType: guessMime(filename) });
+      else Alert.alert('Téléchargement terminé', filename);
+    } catch (_error) {
+      Alert.alert('Téléchargement impossible', 'Le média n’a pas pu être téléchargé.');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <View style={styles.card}>
       {/* Date + Badge */}
@@ -164,7 +182,7 @@ export default function NewsCard({ item }) {
       </View>
 
       {/* Titre */}
-      <Text style={styles.title} numberOfLines={2}>
+      <Text style={styles.title}>
         {item.titre}
       </Text>
 
@@ -172,25 +190,22 @@ export default function NewsCard({ item }) {
       <LinkifiedText
         text={item.description}
         style={styles.desc}
-        numberOfLines={expanded ? undefined : 3}
         selectable
       />
-
-      {isLong && (
-        <TouchableOpacity onPress={() => setExpanded(!expanded)}>
-          <Text style={styles.more}>
-            {expanded ? 'Voir moins' : 'Voir plus'}
-          </Text>
-        </TouchableOpacity>
-      )}
 
       {/* Image Preview */}
       {showImage && fileUrl ? (
         <TouchableOpacity onPress={openFileInApp} activeOpacity={0.9} style={styles.mediaWrap}>
           <Image
             source={{ uri: encodeURI(fileUrl) }}
-            style={styles.image}
-            resizeMode="cover"
+            style={[styles.image, imageAspectRatio && { aspectRatio: imageAspectRatio }]}
+            resizeMode="contain"
+            onLoad={({ nativeEvent }) => {
+              const source = nativeEvent?.source;
+              if (source?.width > 0 && source?.height > 0) {
+                setImageAspectRatio(source.width / source.height);
+              }
+            }}
           />
         </TouchableOpacity>
       ) : null}
@@ -205,7 +220,13 @@ export default function NewsCard({ item }) {
       {/* Document / File link */}
       {showFileLink ? (
         <TouchableOpacity onPress={openFileInApp} style={styles.fileBtn} activeOpacity={0.8}>
-          <Text style={styles.fileText}>📎 Voir la pièce jointe</Text>
+          <Text style={styles.fileText}>▧ Voir la pièce jointe</Text>
+        </TouchableOpacity>
+      ) : null}
+
+      {fileUrl ? (
+        <TouchableOpacity onPress={downloadFile} style={styles.downloadBtn} disabled={downloading}>
+          <Text style={styles.downloadText}>{downloading ? 'Téléchargement…' : '↓ Télécharger le média'}</Text>
         </TouchableOpacity>
       ) : null}
 
@@ -215,10 +236,11 @@ export default function NewsCard({ item }) {
         <TouchableOpacity
           style={styles.shareBtn}
           onPress={handleShare}
+          disabled={sharing}
           activeOpacity={0.75}
         >
           <Text style={styles.shareIcon}>↗</Text>
-          <Text style={styles.shareText}>Partager</Text>
+          <Text style={styles.shareText}>{sharing ? 'Préparation…' : 'Partager'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -324,7 +346,7 @@ const styles = StyleSheet.create({
   },
   image: {
     width: '100%',
-    height: 190,
+    aspectRatio: 16 / 9,
     borderRadius: 12,
     backgroundColor: '#F3F4F6',
   },
@@ -343,6 +365,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#0284C7',
   },
+  downloadBtn: { marginTop: 4, paddingVertical: 9, alignItems: 'center', borderRadius: 10, backgroundColor: '#ECFDF5' },
+  downloadText: { color: '#047857', fontSize: 13, fontWeight: '700' },
   footer: {
     marginTop: 12,
   },

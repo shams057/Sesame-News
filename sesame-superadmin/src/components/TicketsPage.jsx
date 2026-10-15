@@ -1,12 +1,29 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../api/axios';
 
-const DEPARTMENTS = ['Finance', 'IT', 'RH', 'Pédagogie', 'Administration', 'Direction', 'Autre'];
+const DEPARTMENTS = [
+  'Service Scolarité',
+  'Service Stage',
+  'Département licence Informatique',
+  'Département Management',
+  'Département Prepa_Ingénieur',
+  'Département FTA',
+  'Service IT',
+  'Service qualité',
+  'Service coopération international',
+  'Service Marketing',
+  'Service Admission',
+  'Service Finance',
+  'Service Student Success',
+];
 
 export default function TicketsPage() {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [toast, setToast] = useState('');
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const newestTicketId = useRef(null);
   
   // Filters & Pagination
   const [filterStatus, setFilterStatus] = useState('');
@@ -21,7 +38,7 @@ export default function TicketsPage() {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    department: 'IT',
+    department: 'Service IT',
     status: 'open',
   });
   const [submitting, setSubmitting] = useState(false);
@@ -30,8 +47,8 @@ export default function TicketsPage() {
   // View Detail Modal
   const [selectedTicket, setSelectedTicket] = useState(null);
 
-  const fetchTickets = async () => {
-    setLoading(true);
+  const fetchTickets = useCallback(async ({ notifyNew = false, manual = false } = {}) => {
+    if (manual) setLoading(true);
     setError(null);
     try {
       const params = { page };
@@ -42,21 +59,48 @@ export default function TicketsPage() {
       setTickets(res.data.content || []);
       setTotalPages(res.data.totalPages || 1);
       setTotalElements(res.data.totalElements || 0);
+      let latestTickets = res.data.content || [];
+      if (notifyNew && (page !== 0 || filterStatus || filterDept)) {
+        const latest = await api.get('/tickets', { params: { page: 0 } });
+        latestTickets = latest.data.content || [];
+      }
+      const ids = latestTickets.map((ticket) => Number(ticket.id)).filter(Number.isFinite);
+      const newestId = ids.length ? Math.max(...ids) : null;
+      if (newestTicketId.current === null) newestTicketId.current = newestId;
+      else if (notifyNew && newestId !== null && newestId > newestTicketId.current) {
+        const newTickets = latestTickets.filter((ticket) => Number(ticket.id) > newestTicketId.current);
+        setToast(newTickets.length === 1
+          ? `Nouveau ticket : ${newTickets[0].title}`
+          : `${newTickets.length} nouveaux tickets reçus`);
+        newestTicketId.current = newestId;
+      } else if (newestId !== null) newestTicketId.current = Math.max(newestTicketId.current, newestId);
+      setLastUpdated(new Date());
     } catch (err) {
       console.error('Fetch tickets error:', err);
-      setError('Impossible de charger l\'historique des tickets.');
+      if (!notifyNew || manual) setError('Impossible de charger l\'historique des tickets.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, filterStatus, filterDept]);
 
   useEffect(() => {
-    fetchTickets();
-  }, [page, filterStatus, filterDept]);
+    fetchTickets({ manual: true });
+  }, [fetchTickets]);
+
+  useEffect(() => {
+    const interval = setInterval(() => fetchTickets({ notifyNew: true }), 20000);
+    return () => clearInterval(interval);
+  }, [fetchTickets]);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timeout = setTimeout(() => setToast(''), 5000);
+    return () => clearTimeout(timeout);
+  }, [toast]);
 
   const handleOpenCreate = () => {
     setEditingTicket(null);
-    setFormData({ title: '', description: '', department: 'IT', status: 'open' });
+    setFormData({ title: '', description: '', department: 'Service IT', status: 'open' });
     setModalError('');
     setShowModal(true);
   };
@@ -66,7 +110,7 @@ export default function TicketsPage() {
     setFormData({
       title: t.title || '',
       description: t.description || '',
-      department: t.department || 'IT',
+      department: t.department || 'Service IT',
       status: t.status || 'open',
     });
     setModalError('');
@@ -92,7 +136,7 @@ export default function TicketsPage() {
         });
       }
       setShowModal(false);
-      fetchTickets();
+      fetchTickets({ notifyNew: true });
     } catch (err) {
       console.error('Save ticket error:', err);
       setModalError(err.response?.data?.error || 'Erreur lors de l\'enregistrement du ticket.');
@@ -153,7 +197,14 @@ export default function TicketsPage() {
           </svg>
           Créer un ticket
         </button>
+        <button onClick={() => fetchTickets({ manual: true, notifyNew: true })} style={s.refreshBtn} disabled={loading}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.6 9a7 7 0 0 1 11.9-2L20 12M4 12l2.5 5a7 7 0 0 0 11.9-2"/></svg>
+          {loading ? 'Actualisation…' : 'Actualiser'}
+        </button>
+        <span style={s.updatedAt}>Actualisé {lastUpdated?.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) || '—'} · auto toutes les 20 s</span>
       </div>
+
+      {toast && <div role="status" style={s.toast}><span aria-hidden="true">✓</span>{toast}<button onClick={() => setToast('')} aria-label="Fermer l’alerte">×</button></div>}
 
       {/* Filter Bar */}
       <div style={s.filterBar}>
@@ -472,6 +523,9 @@ const s = {
     cursor: 'pointer',
     boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
   },
+  refreshBtn: { display: 'inline-flex', alignItems: 'center', gap: 8, background: '#fff', color: '#1a56db', border: '1px solid #bfdbfe', padding: '10px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' },
+  updatedAt: { alignSelf: 'center', color: '#6b7280', fontSize: 11 },
+  toast: { position: 'fixed', right: 24, bottom: 24, zIndex: 200, display: 'flex', alignItems: 'center', gap: 10, maxWidth: 360, padding: '14px 16px', color: '#065f46', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 12, boxShadow: '0 12px 32px rgba(15,23,42,.16)', fontSize: 13, fontWeight: 600 },
   filterBar: {
     display: 'flex',
     gap: 16,
