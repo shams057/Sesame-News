@@ -10,8 +10,10 @@ import {
   Image,
   Modal,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
 import { colors } from '../theme/colors';
 import LinkifiedText from './LinkifiedText';
 import { BASE_URL } from '../api/axios';
@@ -58,6 +60,34 @@ function guessMime(filename = '') {
   return 'application/octet-stream';
 }
 
+function displayName(path) {
+  const raw = (path || '').split('?')[0].split('/').pop() || '';
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+function Action({ icon, label, onPress, busy }) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      disabled={busy}
+      activeOpacity={0.6}
+      hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+      style={styles.action}
+    >
+      {busy ? (
+        <ActivityIndicator size="small" color={colors.textSoft} />
+      ) : (
+        <Text style={{ fontSize: 16, color: colors.textSoft, lineHeight: 20 }}>{icon}</Text>
+      )}
+      <Text style={styles.actionText}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
 export default function NewsCard({ item }) {
   const [sharing, setSharing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
@@ -68,6 +98,10 @@ export default function NewsCard({ item }) {
   const showImage = isImage(item.path);
   const showVideo = isVideo(item.path);
   const showFileLink = item.path && !showImage && !showVideo;
+
+  const fileName = displayName(item.path);
+  const fileExt = (fileName.split('.').pop() || 'FILE').toUpperCase().slice(0, 4);
+
   const handleShare = async () => {
     if (sharing) return;
     const text = `${item.titre}\n\n${item.description || ''}`.trim();
@@ -110,10 +144,7 @@ export default function NewsCard({ item }) {
         await Share.share({ message: text, title: item.titre });
       }
     } catch (_error) {
-      Alert.alert(
-        'Partage fichier impossible',
-        'Le texte va être partagé.'
-      );
+      Alert.alert('Partage fichier impossible', 'Le texte va être partagé.');
       try {
         await Share.share({ message: text, title: item.titre });
       } catch {
@@ -138,7 +169,7 @@ export default function NewsCard({ item }) {
         });
       } catch (e) {
         console.log('In-app browser error:', e);
-        Alert.alert('Erreur', 'Impossible d\'ouvrir ce document.');
+        Alert.alert('Erreur', "Impossible d'ouvrir ce document.");
       }
     }
   };
@@ -152,54 +183,48 @@ export default function NewsCard({ item }) {
       const filename = item.path?.split('/').pop() || `news_${item.id}.bin`;
       const result = await FileSystem.downloadAsync(fileUrl, `${directory}${filename}`);
       if (result.status !== 200) throw new Error(`HTTP ${result.status}`);
-      if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(result.uri, { mimeType: guessMime(filename) });
-      else Alert.alert('Téléchargement terminé', filename);
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(result.uri, { mimeType: guessMime(filename) });
+      } else {
+        Alert.alert('Téléchargement terminé', filename);
+      }
     } catch (_error) {
-      Alert.alert('Téléchargement impossible', 'Le média n’a pas pu être téléchargé.');
+      Alert.alert('Téléchargement impossible', "Le média n'a pas pu être téléchargé.");
     } finally {
       setDownloading(false);
     }
   };
 
+  const date = item.createdAt
+    ? new Date(item.createdAt).toLocaleDateString('fr-FR', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      })
+    : '';
+
   return (
-    <View style={styles.card}>
-      {/* Date + Badge */}
+    <View style={styles.row}>
+      {/* Audience + date */}
       <View style={styles.metaRow}>
-        <Text style={styles.date}>
-          {item.createdAt
-            ? new Date(item.createdAt).toLocaleDateString('fr-FR', {
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric',
-              })
-            : ''}
-        </Text>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>
-            {item.all ? 'Tous' : 'Ma catégorie'}
-          </Text>
+        <View style={styles.audience}>
+          <View style={[styles.dot, item.all ? styles.dotAll : styles.dotMine]} />
+          <Text style={styles.audienceText}>{item.all ? 'Tous' : 'Ma catégorie'}</Text>
         </View>
+        <Text style={styles.date}>{date}</Text>
       </View>
 
-      {/* Titre */}
-      <Text style={styles.title}>
-        {item.titre}
-      </Text>
+      <Text style={styles.title}>{item.titre}</Text>
 
-      {/* Description */}
-      <LinkifiedText
-        text={item.description}
-        style={styles.desc}
-        selectable
-      />
+      <LinkifiedText text={item.description} style={styles.desc} selectable />
 
-      {/* Image Preview */}
+      {/* Image */}
       {showImage && fileUrl ? (
-        <TouchableOpacity onPress={openFileInApp} activeOpacity={0.9} style={styles.mediaWrap}>
+        <TouchableOpacity onPress={openFileInApp} activeOpacity={0.92} style={styles.media}>
           <Image
             source={{ uri: encodeURI(fileUrl) }}
             style={[styles.image, imageAspectRatio && { aspectRatio: imageAspectRatio }]}
-            resizeMode="contain"
+            resizeMode="cover"
             onLoad={({ nativeEvent }) => {
               const source = nativeEvent?.source;
               if (source?.width > 0 && source?.height > 0) {
@@ -207,44 +232,54 @@ export default function NewsCard({ item }) {
               }
             }}
           />
+          <View style={styles.expand} pointerEvents="none">
+            <Text style={{ fontSize: 13, color: '#FFFFFF', lineHeight: 16 }}>⤢</Text>
+          </View>
         </TouchableOpacity>
       ) : null}
 
-      {/* Video Preview */}
+      {/* Video */}
       {showVideo && fileUrl ? (
-        <View style={{ marginTop: 8 }}>
+        <View style={[styles.media, styles.videoWrap]}>
           <VideoPlayer uri={fileUrl} />
         </View>
       ) : null}
 
-      {/* Document / File link */}
+      {/* Document */}
       {showFileLink ? (
-        <TouchableOpacity onPress={openFileInApp} style={styles.fileBtn} activeOpacity={0.8}>
-          <Text style={styles.fileText}>▧ Voir la pièce jointe</Text>
+        <TouchableOpacity onPress={openFileInApp} style={styles.file} activeOpacity={0.7}>
+          <View style={styles.fileTile}>
+            <Text style={styles.fileExt}>{fileExt}</Text>
+          </View>
+          <View style={styles.fileInfo}>
+            <Text style={styles.fileName} numberOfLines={1}>
+              {fileName || 'Pièce jointe'}
+            </Text>
+            <Text style={styles.fileHint}>Ouvrir la pièce jointe</Text>
+          </View>
+          <Text style={{ fontSize: 16, color: '#94A3B8', lineHeight: 20 }}>›</Text>
         </TouchableOpacity>
       ) : null}
 
-      {fileUrl ? (
-        <TouchableOpacity onPress={downloadFile} style={styles.downloadBtn} disabled={downloading}>
-          <Text style={styles.downloadText}>{downloading ? 'Téléchargement…' : '↓ Télécharger le média'}</Text>
-        </TouchableOpacity>
-      ) : null}
-
-      {/* Footer / Share */}
-      <View style={styles.footer}>
-        <View style={styles.footerLine} />
-        <TouchableOpacity
-          style={styles.shareBtn}
+      {/* Actions */}
+      <View style={styles.actions}>
+        <Action
+          icon="↗"
+          label={sharing ? 'Préparation…' : 'Partager'}
           onPress={handleShare}
-          disabled={sharing}
-          activeOpacity={0.75}
-        >
-          <Text style={styles.shareIcon}>↗</Text>
-          <Text style={styles.shareText}>{sharing ? 'Préparation…' : 'Partager'}</Text>
-        </TouchableOpacity>
+          busy={sharing}
+        />
+        {fileUrl ? (
+          <Action
+            icon="↓"
+            label={downloading ? 'Téléchargement…' : 'Télécharger'}
+            onPress={downloadFile}
+            busy={downloading}
+          />
+        ) : null}
       </View>
 
-      {/* Fullscreen Media Viewer Modal */}
+      {/* Fullscreen viewer */}
       <Modal
         visible={modalVisible}
         transparent={false}
@@ -260,8 +295,9 @@ export default function NewsCard({ item }) {
             <TouchableOpacity
               onPress={() => setModalVisible(false)}
               style={styles.closeBtn}
+              accessibilityLabel="Fermer"
             >
-              <Text style={styles.closeBtnText}>✕ Fermer</Text>
+              <Text style={{ fontSize: 18, color: '#FFFFFF', lineHeight: 22, fontWeight: '500' }}>✕</Text>
             </TouchableOpacity>
           </View>
 
@@ -283,18 +319,10 @@ export default function NewsCard({ item }) {
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+  row: {
+    paddingVertical: 22,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   metaRow: {
     flexDirection: 'row',
@@ -302,111 +330,88 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 10,
   },
-  date: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.textSoft,
-  },
-  badge: {
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 99,
-    borderWidth: 1,
-    borderColor: '#DBEAFE',
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.primary,
-  },
+  audience: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  dot: { width: 7, height: 7, borderRadius: 4 },
+  dotAll: { backgroundColor: '#94A3B8' },
+  dotMine: { backgroundColor: colors.primary },
+  audienceText: { fontSize: 13, fontWeight: '600', color: colors.text },
+  date: { fontSize: 13, color: colors.textSoft },
+
   title: {
-    fontSize: 16.5,
+    fontSize: 19,
     fontWeight: '700',
     color: colors.text,
-    lineHeight: 23,
+    lineHeight: 26,
+    letterSpacing: -0.3,
     marginBottom: 8,
   },
   desc: {
-    fontSize: 14,
+    fontSize: 15,
     color: colors.textSoft,
-    lineHeight: 21,
+    lineHeight: 23,
   },
-  more: {
-    color: colors.primary,
-    fontWeight: '700',
-    fontSize: 13,
-    marginTop: 6,
-    marginBottom: 8,
-  },
-  mediaWrap: {
-    position: 'relative',
-    marginTop: 8,
-    marginBottom: 10,
-  },
+
+  media: { marginTop: 16 },
   image: {
     width: '100%',
     aspectRatio: 16 / 9,
-    borderRadius: 12,
-    backgroundColor: '#F3F4F6',
+    borderRadius: 14,
+    backgroundColor: '#F1F5F9',
   },
-  fileBtn: {
-    marginTop: 10,
-    marginBottom: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    backgroundColor: '#F0F9FF',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#BAE6FD',
-  },
-  fileText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#0284C7',
-  },
-  downloadBtn: { marginTop: 4, paddingVertical: 9, alignItems: 'center', borderRadius: 10, backgroundColor: '#ECFDF5' },
-  downloadText: { color: '#047857', fontSize: 13, fontWeight: '700' },
-  footer: {
-    marginTop: 12,
-  },
-  footerLine: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginBottom: 10,
-  },
-  shareBtn: {
-    flexDirection: 'row',
+  videoWrap: { borderRadius: 14, overflow: 'hidden' },
+  expand: {
+    position: 'absolute',
+    right: 10,
+    bottom: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(15,23,42,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 9,
-    borderRadius: 10,
-    backgroundColor: '#F3F4F6',
-  },
-  shareIcon: {
-    fontSize: 14,
-    color: colors.textSoft,
-    fontWeight: '700',
-  },
-  shareText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textSoft,
   },
 
-  // Modal styles
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#000000',
+  file: {
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: '#F8FAFC',
   },
+  fileTile: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fileExt: { fontSize: 11, fontWeight: '800', color: colors.primary },
+  fileInfo: { flex: 1 },
+  fileName: { fontSize: 14, fontWeight: '600', color: colors.text },
+  fileHint: { fontSize: 12, color: colors.textSoft, marginTop: 2 },
+
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 24,
+    marginTop: 18,
+  },
+  action: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  actionText: { fontSize: 13.5, fontWeight: '600', color: colors.textSoft },
+
+  // Modal
+  modalContainer: { flex: 1, backgroundColor: '#000000' },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#111827',
+    paddingVertical: 10,
   },
   modalTitle: {
     color: '#FFFFFF',
@@ -416,15 +421,12 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   closeBtn: {
-    backgroundColor: '#374151',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  closeBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalContent: {
     flex: 1,
@@ -432,8 +434,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#000000',
   },
-  modalImage: {
-    width: '100%',
-    height: '100%',
-  },
+  modalImage: { width: '100%', height: '100%' },
 });
