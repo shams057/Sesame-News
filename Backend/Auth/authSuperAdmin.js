@@ -4,7 +4,6 @@ const router = express.Router();
 const db = require('../models');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-// const {requireAuthSupersuperAdmin} = require('./../middleware/authMiddleware');
 
 // User registration
 router.post('/registersuperAdmin', async (req, res) => {
@@ -33,17 +32,13 @@ router.post('/loginsuperAdmin', async (req, res) => {
     const { login, password } = req.body;
     const user = await db.superAdmin.findOne({where :{login:login}  }); 
     if (!user) {
-    return res.status(401).json({ error: 'this personne is not existe!!' });
+    return res.status(401).json({ error: 'This user does not exist!' });
     }
     else{
         
-            const passwordMatch = await bcrypt.compare(password, user.password);
+        const passwordMatch = await bcrypt.compare(password, user.password);
         if (!passwordMatch) {
-            uspass=user.password
-            uslog=user.login
-           // console.log('passe '+bcrypt.hash(password, 10))
-        return res.status(401).json({ error: 'Authentication failed pwd' });
-       // return res.status(401).json({ password,uspass,login,uslog});
+            return res.status(401).json({ error: 'Authentication failed pwd' });
         }
         
         // const token = jwt.sign({ userId: user.id, role:"DocTor" ,password:generateRandomString},"JMA");
