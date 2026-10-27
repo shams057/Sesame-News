@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { io } from 'socket.io-client';
 import api from '../api/axios';
+import TicketChat from './TicketChat';
 
 const DEPARTMENTS = [
   'Service Scolarité',
@@ -28,6 +30,7 @@ export default function TicketsPage() {
   // Filters & Pagination
   const [filterStatus, setFilterStatus] = useState('');
   const [filterDept, setFilterDept] = useState('');
+  const [unreadOnly, setUnreadOnly] = useState(false);
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [totalElements, setTotalElements] = useState(0);
@@ -46,6 +49,7 @@ export default function TicketsPage() {
 
   // View Detail Modal
   const [selectedTicket, setSelectedTicket] = useState(null);
+  const [chatTicket, setChatTicket] = useState(null);
 
   const fetchTickets = useCallback(async ({ notifyNew = false, manual = false } = {}) => {
     if (manual) setLoading(true);
@@ -54,6 +58,7 @@ export default function TicketsPage() {
       const params = { page };
       if (filterStatus) params.status = filterStatus;
       if (filterDept) params.department = filterDept;
+      if (unreadOnly) params.unread = 'true';
 
       const res = await api.get('/tickets', { params });
       setTickets(res.data.content || []);
@@ -81,7 +86,7 @@ export default function TicketsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, filterStatus, filterDept]);
+  }, [page, filterStatus, filterDept, unreadOnly]);
 
   useEffect(() => {
     fetchTickets({ manual: true });
@@ -90,6 +95,13 @@ export default function TicketsPage() {
   useEffect(() => {
     const interval = setInterval(() => fetchTickets({ notifyNew: true }), 20000);
     return () => clearInterval(interval);
+  }, [fetchTickets]);
+
+  useEffect(() => {
+    const socket = io(api.defaults.baseURL, { auth: { token: localStorage.getItem('token') }, transports: ['websocket', 'polling'] });
+    socket.on('ticket:message', () => fetchTickets({ notifyNew: true }));
+    socket.on('ticket:read', () => fetchTickets());
+    return () => socket.disconnect();
   }, [fetchTickets]);
 
   useEffect(() => {
@@ -146,7 +158,7 @@ export default function TicketsPage() {
   };
 
   const handleToggleStatus = async (ticket) => {
-    const newStatus = ticket.status === 'open' ? 'closed' : 'open';
+    const newStatus = ticket.status === 'open' ? 'in_progress' : ticket.status === 'in_progress' ? 'closed' : 'open';
     try {
       await api.put(`/ticket/${ticket.id}`, {
         status: newStatus,
@@ -217,6 +229,7 @@ export default function TicketsPage() {
           >
             <option value="">Tous les statuts</option>
             <option value="open">Ouverts</option>
+            <option value="in_progress">En cours</option>
             <option value="closed">Fermés</option>
           </select>
         </div>
@@ -232,6 +245,13 @@ export default function TicketsPage() {
             {DEPARTMENTS.map((d) => (
               <option key={d} value={d}>{d}</option>
             ))}
+          </select>
+        </div>
+        <div style={s.filterGroup}>
+          <label style={s.filterLabel}>Conversations:</label>
+          <select value={unreadOnly ? 'unread' : 'all'} onChange={(e) => { setUnreadOnly(e.target.value === 'unread'); setPage(0); }} style={s.selectInput}>
+            <option value="all">Toutes les conversations</option>
+            <option value="unread">Messages non lus</option>
           </select>
         </div>
       </div>
@@ -284,9 +304,9 @@ export default function TicketsPage() {
                       onClick={() => handleToggleStatus(t)}
                       style={{
                         ...s.statusBadge,
-                        background: t.status === 'open' ? '#ECFDF5' : '#F3F4F6',
-                        color: t.status === 'open' ? '#059669' : '#6B7280',
-                        border: `1px solid ${t.status === 'open' ? '#A7F3D0' : '#E5E7EB'}`,
+                        background: t.status === 'closed' ? '#F3F4F6' : t.status === 'in_progress' ? '#EFF6FF' : '#ECFDF5',
+                        color: t.status === 'closed' ? '#6B7280' : t.status === 'in_progress' ? '#1D4ED8' : '#059669',
+                        border: `1px solid ${t.status === 'closed' ? '#E5E7EB' : t.status === 'in_progress' ? '#BFDBFE' : '#A7F3D0'}`,
                         cursor: 'pointer',
                       }}
                       title="Cliquer pour changer le statut"
@@ -296,10 +316,10 @@ export default function TicketsPage() {
                           width: 6,
                           height: 6,
                           borderRadius: '50%',
-                          background: t.status === 'open' ? '#10B981' : '#9CA3AF',
+                          background: t.status === 'closed' ? '#9CA3AF' : t.status === 'in_progress' ? '#3B82F6' : '#10B981',
                         }}
                       />
-                      {t.status === 'open' ? 'Ouvert' : 'Fermé'}
+                      {t.status === 'open' ? 'Ouvert' : t.status === 'in_progress' ? 'En cours' : 'Fermé'}
                     </span>
                   </td>
                   <td style={{ ...s.td, fontSize: 13, color: '#374151' }}>
@@ -310,6 +330,17 @@ export default function TicketsPage() {
                   </td>
                   <td style={{ ...s.td, textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                      {(t.status !== 'closed' || t.unreadChatCount > 0) && (
+                        <button
+                          onClick={() => setChatTicket(t)}
+                          style={{ ...s.iconBtn, position: 'relative', color: '#1a56db' }}
+                          title="Ouvrir la conversation"
+                          aria-label={`Ouvrir la conversation du ticket ${t.id}`}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5z" /></svg>
+                          {t.unreadChatCount > 0 && <span style={s.chatUnreadDot} />}
+                        </button>
+                      )}
                       <button
                         onClick={() => setSelectedTicket(t)}
                         style={s.iconBtn}
@@ -411,6 +442,7 @@ export default function TicketsPage() {
                 style={s.input}
               >
                 <option value="open">Ouvert</option>
+                <option value="in_progress">En cours</option>
                 <option value="closed">Fermé</option>
               </select>
             </div>
@@ -452,12 +484,12 @@ export default function TicketsPage() {
               <span
                 style={{
                   ...s.statusBadge,
-                  background: selectedTicket.status === 'open' ? '#ECFDF5' : '#F3F4F6',
-                  color: selectedTicket.status === 'open' ? '#059669' : '#6B7280',
-                  border: `1px solid ${selectedTicket.status === 'open' ? '#A7F3D0' : '#E5E7EB'}`,
+                  background: selectedTicket.status === 'closed' ? '#F3F4F6' : selectedTicket.status === 'in_progress' ? '#EFF6FF' : '#ECFDF5',
+                  color: selectedTicket.status === 'closed' ? '#6B7280' : selectedTicket.status === 'in_progress' ? '#1D4ED8' : '#059669',
+                  border: `1px solid ${selectedTicket.status === 'closed' ? '#E5E7EB' : selectedTicket.status === 'in_progress' ? '#BFDBFE' : '#A7F3D0'}`,
                 }}
               >
-                {selectedTicket.status === 'open' ? 'Ouvert' : 'Fermé'}
+                {selectedTicket.status === 'open' ? 'Ouvert' : selectedTicket.status === 'in_progress' ? 'En cours' : 'Fermé'}
               </span>
             </div>
 
@@ -493,6 +525,7 @@ export default function TicketsPage() {
           </div>
         </div>
       )}
+      {chatTicket && <TicketChat ticket={chatTicket} onClose={() => setChatTicket(null)} />}
     </div>
   );
 }
@@ -592,6 +625,7 @@ const s = {
     alignItems: 'center',
     justifyContent: 'center',
   },
+  chatUnreadDot: { position: 'absolute', top: -3, right: -3, width: 8, height: 8, borderRadius: '50%', background: '#EF4444', border: '1.5px solid #fff' },
   emptyState: { padding: 40, textAlign: 'center', color: '#6B7280', fontSize: 14 },
   pagination: {
     display: 'flex',

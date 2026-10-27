@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import api from '../api/axios';
 import NewTicketModal from '../components/NewTicketModal';
+import TicketChatModal from '../components/TicketChatModal';
 import { useAuth } from '../context/AuthContext';
 
 const COLORS = {
@@ -66,18 +67,19 @@ function normalizeTicket(ticket) {
     sujet: ticket.title,
     categorie: ticket.department,
     description: ticket.description || '',
-    statut: ticket.status === 'closed' ? 'ferme' : 'ouvert',
+    statut: ticket.status === 'closed' ? 'ferme' : ticket.status === 'in_progress' ? 'en_cours' : 'ouvert',
+    rawStatus: ticket.status,
+    unreadChatCount: ticket.unreadChatCount || 0,
     dateCreation: ticket.openedAt || ticket.createdAt,
     dateMiseAJour: ticket.updatedAt || ticket.closedAt || ticket.openedAt || ticket.createdAt,
   };
 }
 
 function StatusBadge({ status }) {
-  const isOpen = status === 'ouvert';
   return (
-    <View style={[styles.statusBadge, isOpen ? styles.statusOpen : styles.statusClosed]}>
-      <Text style={[styles.statusText, { color: isOpen ? COLORS.warning : COLORS.success }]}>
-        {isOpen ? 'Ouvert' : 'Fermé'}
+    <View style={[styles.statusBadge, status === 'ferme' ? styles.statusClosed : status === 'en_cours' ? styles.statusProgress : styles.statusOpen]}>
+      <Text style={[styles.statusText, { color: status === 'ferme' ? COLORS.success : status === 'en_cours' ? COLORS.primary : COLORS.warning }]}>
+        {status === 'ferme' ? 'Fermé' : status === 'en_cours' ? 'En cours' : 'Ouvert'}
       </Text>
     </View>
   );
@@ -97,7 +99,7 @@ function StatCard({ label, value, tone, stacked }) {
   );
 }
 
-export default function TicketsScreen() {
+export default function TicketsScreen({ unreadTicketIds = [] }) {
   const { token } = useAuth();
   const { width } = useWindowDimensions();
   const isWide = width > 1180;
@@ -110,6 +112,7 @@ export default function TicketsScreen() {
   const [search, setSearch] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
   const [toast, setToast] = useState(null);
+  const [chatTicket, setChatTicket] = useState(null);
 
   const fetchTickets = useCallback(async () => {
     try {
@@ -146,18 +149,18 @@ export default function TicketsScreen() {
 
   const query = normalize(search.trim().replace(/^#/, ''));
   const filteredTickets = [...tickets]
-    .filter((ticket) => filter === 'tous' || ticket.statut === filter)
+    .filter((ticket) => filter === 'tous' || (filter === 'ouvert' ? ticket.statut !== 'ferme' : ticket.statut === 'ferme'))
     .filter((ticket) => !query || normalize(`${ticket.sujet} ${ticket.id}`).includes(query))
     .sort((a, b) => new Date(b.dateCreation) - new Date(a.dateCreation));
   const selectedTicket = tickets.find((ticket) => ticket.id === selectedId);
-  const openCount = tickets.filter((ticket) => ticket.statut === 'ouvert').length;
+  const openCount = tickets.filter((ticket) => ticket.statut !== 'ferme').length;
   const closedCount = tickets.length - openCount;
 
   const openModal = () => setModalVisible(true);
 
   const toggleStatus = async () => {
     if (!selectedTicket) return;
-    const nextStatus = selectedTicket.statut === 'ouvert' ? 'closed' : 'open';
+    const nextStatus = selectedTicket.statut !== 'ferme' ? 'closed' : 'open';
     const nextLabel = nextStatus === 'closed' ? 'fermé' : 'rouvert';
     try {
       await api.put(
@@ -210,17 +213,24 @@ export default function TicketsScreen() {
           <View style={styles.infoBox}>
             <Text style={styles.infoIcon}>i</Text>
             <Text style={styles.infoText}>
-              {selectedTicket.statut === 'ouvert'
+              {selectedTicket.statut !== 'ferme'
                 ? "Votre demande est en cours de traitement. Vous serez notifié dès qu'il y aura une réponse."
                 : 'Cette demande est clôturée. Vous pouvez la rouvrir si besoin.'}
             </Text>
           </View>
+          {(selectedTicket.statut !== 'ferme' || unreadTicketIds.includes(Number(selectedTicket.id))) && (
+            <TouchableOpacity style={styles.chatAction} onPress={() => setChatTicket(selectedTicket)}>
+              <Text style={styles.chatActionIcon}>▤</Text>
+              <Text style={styles.chatActionText}>Ouvrir la conversation</Text>
+              {unreadTicketIds.includes(Number(selectedTicket.id)) && <View style={styles.chatActionDot} />}
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
-            style={[styles.statusAction, selectedTicket.statut === 'ouvert' && styles.closeAction]}
+            style={[styles.statusAction, selectedTicket.statut !== 'ferme' && styles.closeAction]}
             onPress={toggleStatus}
           >
-            <Text style={[styles.statusActionText, selectedTicket.statut === 'ouvert' && styles.closeActionText]}>
-              {selectedTicket.statut === 'ouvert' ? 'Fermer le ticket' : 'Rouvrir le ticket'}
+            <Text style={[styles.statusActionText, selectedTicket.statut !== 'ferme' && styles.closeActionText]}>
+              {selectedTicket.statut !== 'ferme' ? 'Fermer le ticket' : 'Rouvrir le ticket'}
             </Text>
           </TouchableOpacity>
           <Text style={styles.demoNote}>Les modifications sont synchronisées avec le service de support.</Text>
@@ -304,27 +314,41 @@ export default function TicketsScreen() {
               const categoryStyle = CATEGORY_STYLES[ticket.categorie] || CATEGORY_STYLES.Autre;
               const isSelected = selectedId === ticket.id;
               return (
-                <TouchableOpacity
-                  key={ticket.id}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: isSelected }}
-                  onPress={() => setSelectedId(ticket.id)}
-                  style={[styles.ticketCard, isSelected && styles.ticketCardSelected]}
-                >
-                  <View style={[styles.ticketIcon, { backgroundColor: categoryStyle.background }]}>
-                    <Text style={[styles.ticketIconText, { color: categoryStyle.color }]}>{categoryStyle.icon}</Text>
-                  </View>
-                  <View style={styles.ticketCopy}>
-                    <View style={styles.ticketMeta}>
-                      <Text style={styles.ticketId}>#{ticket.id}</Text>
-                      <Text style={styles.ticketDate}> · {shortDate(ticket.dateCreation)}</Text>
+                <View key={ticket.id} style={[styles.ticketCard, isSelected && styles.ticketCardSelected]}>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isSelected }}
+                    onPress={() => setSelectedId(ticket.id)}
+                    style={styles.ticketSelect}
+                  >
+                    <View style={styles.ticketIconWrap}>
+                      <View style={[styles.ticketIcon, { backgroundColor: categoryStyle.background }]}>
+                        <Text style={[styles.ticketIconText, { color: categoryStyle.color }]}>{categoryStyle.icon}</Text>
+                      </View>
+                      {unreadTicketIds.includes(Number(ticket.id)) && <View style={styles.ticketUnreadDot} />}
                     </View>
-                    <Text style={styles.ticketSubject} numberOfLines={1}>{ticket.sujet}</Text>
-                    <Text style={styles.ticketDescription} numberOfLines={1}>{ticket.description}</Text>
-                  </View>
-                  <StatusBadge status={ticket.statut} />
-                  <Text style={styles.ticketChevron}>›</Text>
-                </TouchableOpacity>
+                    <View style={styles.ticketCopy}>
+                      <View style={styles.ticketMeta}>
+                        <Text style={styles.ticketId}>#{ticket.id}</Text>
+                        <Text style={styles.ticketDate}> · {shortDate(ticket.dateCreation)}</Text>
+                      </View>
+                      <Text style={styles.ticketSubject} numberOfLines={1}>{ticket.sujet}</Text>
+                      <Text style={styles.ticketDescription} numberOfLines={1}>{ticket.description}</Text>
+                    </View>
+                    <StatusBadge status={ticket.statut} />
+                  </TouchableOpacity>
+                  {(ticket.rawStatus !== 'closed' || unreadTicketIds.includes(Number(ticket.id))) && (
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      accessibilityLabel={`Ouvrir la conversation du ticket ${ticket.id}`}
+                      onPress={() => setChatTicket(ticket)}
+                      style={styles.ticketChatMini}
+                    >
+                      <Text style={styles.ticketChatMiniText}>▤</Text>
+                      {unreadTicketIds.includes(Number(ticket.id)) && <View style={styles.ticketUnreadDot} />}
+                    </TouchableOpacity>
+                  )}
+                </View>
               );
             }) : (
               <View style={styles.emptyList}>
@@ -349,6 +373,8 @@ export default function TicketsScreen() {
           await fetchTickets();
         }}
       />
+
+      <TicketChatModal visible={!!chatTicket} ticket={chatTicket} token={token} onClose={() => setChatTicket(null)} />
 
       {toast ? (
         <View style={[styles.toast, toast.type === 'error' && styles.toastError]}>
@@ -482,7 +508,10 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   ticketCardSelected: { borderColor: COLORS.primaryLight, borderWidth: 2 },
+  ticketSelect: { flex: 1, minWidth: 0, minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 13 },
   ticketIcon: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+  ticketIconWrap: { position: 'relative' },
+  ticketUnreadDot: { position: 'absolute', top: -1, right: -1, width: 11, height: 11, borderRadius: 6, backgroundColor: '#EF4444', borderWidth: 2, borderColor: '#fff' },
   ticketIconText: { fontSize: 18, fontWeight: '800' },
   ticketCopy: { flex: 1, minWidth: 0 },
   ticketMeta: { flexDirection: 'row', alignItems: 'center', marginBottom: 3 },
@@ -492,9 +521,12 @@ const styles = StyleSheet.create({
   ticketDescription: { color: COLORS.muted, fontSize: 12, marginTop: 2 },
   statusBadge: { minWidth: 68, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
   statusOpen: { backgroundColor: COLORS.warningBackground },
+  statusProgress: { backgroundColor: '#DBEAFE' },
   statusClosed: { backgroundColor: COLORS.successBackground },
   statusText: { fontSize: 11, fontWeight: '700' },
   ticketChevron: { width: 24, color: COLORS.primaryLight, textAlign: 'center', fontSize: 24, lineHeight: 26 },
+  ticketChatMini: { position: 'relative', width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 9, borderWidth: 1, borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' },
+  ticketChatMiniText: { color: COLORS.primary, fontSize: 14, fontWeight: '700' },
   listLoader: { marginVertical: 24 },
   emptyList: { alignItems: 'center', paddingHorizontal: 20, paddingVertical: 32, borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: COLORS.border, backgroundColor: COLORS.white },
   emptyListTitle: { color: COLORS.navy, fontSize: 14, fontWeight: '800' },
@@ -534,6 +566,10 @@ const styles = StyleSheet.create({
   infoText: { flex: 1, color: COLORS.muted, fontSize: 11, lineHeight: 17 },
   statusAction: { minHeight: 42, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, marginTop: 14, borderRadius: 9, backgroundColor: COLORS.primary },
   statusActionText: { color: COLORS.white, fontSize: 12, fontWeight: '700' },
+  chatAction: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, paddingHorizontal: 14, marginTop: 12, borderRadius: 9, borderWidth: 1, borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' },
+  chatActionIcon: { color: COLORS.primary, fontSize: 15, fontWeight: '700' },
+  chatActionText: { color: COLORS.primary, fontSize: 12, fontWeight: '700' },
+  chatActionDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444' },
   closeAction: { borderWidth: 1, borderColor: '#FECACA', backgroundColor: COLORS.white },
   closeActionText: { color: COLORS.danger },
   demoNote: { color: COLORS.muted, fontSize: 10, lineHeight: 15, marginTop: 9 },
