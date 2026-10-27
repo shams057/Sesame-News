@@ -1,326 +1,248 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import api from '../api/axios';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import './TicketStatsPage.css';
 import sesameLogo from '../assets/sesame-logo.png';
 
-const PERIODS = ['Aujourd’hui', '7 derniers jours', 'Ce mois-ci', 'Semestre 1', 'Année 2026-2027'];
+// ─── Helpers ────────────────────────────────────────────────────────
+function formatRelativeTime(dateStr) {
+  if (!dateStr) return '';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'À l\'instant';
+  if (mins < 60) return `Il y a ${mins} min`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `Il y a ${hrs}h ${String(mins % 60).padStart(2, '0')}`;
+  const days = Math.floor(hrs / 24);
+  return `Il y a ${days}j`;
+}
 
-const DEPARTMENTS = [
-  ['Service Scolarité', 'Pôle Central', 284, '19.9%', 81],
-  ['Service IT', 'Infrastructure & ENT', 210, '14.7%', 89],
-  ['Département licence Informatique', 'Pédagogie', 168, '11.8%', 86],
-  ['Service Stage', 'Conventions & PFE', 142, '9.9%', 92],
-  ['Département Prepa_Ingénieur', 'Pédagogie', 125, '8.8%', 84],
-  ['Service Finance', 'Comptabilité', 112, '7.8%', 78],
-  ['Département Management', 'Business School', 98, '6.9%', 87],
-  ['Service Admission', 'Inscriptions', 85, '6.0%', 94],
-  ['Service Student Success', 'Accompagnement', 64, '4.5%', 90],
-  ['Département FTA', 'Alternance', 48, '3.4%', 83],
-  ['Service qualité', 'Audit & Process', 36, '2.5%', 97],
-  ['Service coopération international', 'Mobilité & Échanges', 32, '2.2%', 88],
-  ['Service Marketing', 'Communication', 24, '1.7%', 95],
+function mapStatus(status) {
+  if (status === 'closed') return { label: 'Résolu', tone: 'resolved' };
+  return { label: 'En cours', tone: 'progress' };
+}
+
+function formatDuration(ms) {
+  if (!ms || ms <= 0) return '—';
+  const totalMins = Math.floor(ms / 60000);
+  if (totalMins < 60) return `${totalMins}m`;
+  const hrs = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  if (hrs < 24) return `${hrs}h ${String(mins).padStart(2, '0')}m`;
+  const days = Math.floor(hrs / 24);
+  const remHrs = hrs % 24;
+  return `${days}j ${remHrs}h`;
+}
+
+/** Fetch ALL tickets across all pages */
+async function fetchAllTickets() {
+  const all = [];
+  let page = 0;
+  let totalPages = 1;
+  while (page < totalPages) {
+    const res = await api.get(`/tickets?page=${page}`);
+    const data = res.data;
+    all.push(...(data.content || []));
+    totalPages = data.totalPages || 1;
+    page++;
+  }
+  return all;
+}
+
+/** Filter tickets by a date range */
+function filterByPeriod(tickets, periodKey) {
+  const now = new Date();
+  let start;
+
+  switch (periodKey) {
+    case 'today': {
+      start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      break;
+    }
+    case '7days': {
+      start = new Date(now);
+      start.setDate(start.getDate() - 7);
+      break;
+    }
+    case 'month': {
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+      break;
+    }
+    case 'semester': {
+      // Sept–Feb or Mar–Aug depending on current month
+      const m = now.getMonth(); // 0-indexed
+      if (m >= 8) {
+        // Sept onwards → semester starts Sept of current year
+        start = new Date(now.getFullYear(), 8, 1);
+      } else if (m <= 1) {
+        // Jan-Feb → semester started Sept of previous year
+        start = new Date(now.getFullYear() - 1, 8, 1);
+      } else {
+        // Mar-Aug → semester starts Mar
+        start = new Date(now.getFullYear(), 2, 1);
+      }
+      break;
+    }
+    case 'year': {
+      // Academic year: Sept of previous year if we're before Sept, else Sept of current year
+      const month = now.getMonth();
+      const yearStart = month >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+      start = new Date(yearStart, 8, 1);
+      break;
+    }
+    default:
+      return tickets;
+  }
+
+  return tickets.filter((t) => new Date(t.createdAt) >= start);
+}
+
+/** Compute stats from a list of tickets */
+function computeStats(tickets) {
+  const total = tickets.length;
+  const closed = tickets.filter((t) => t.status === 'closed').length;
+  const open = total - closed;
+  const resolutionRate = total > 0 ? ((closed / total) * 100).toFixed(1) : '0.0';
+
+  // Average treatment time (only for closed tickets with openedAt and closedAt)
+  const durations = tickets
+    .filter((t) => t.status === 'closed' && t.openedAt && t.closedAt)
+    .map((t) => new Date(t.closedAt).getTime() - new Date(t.openedAt).getTime())
+    .filter((d) => d > 0);
+  const avgTreatmentMs = durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : 0;
+
+  // Department breakdown
+  const deptMap = {};
+  for (const t of tickets) {
+    if (!deptMap[t.department]) deptMap[t.department] = { total: 0, closed: 0 };
+    deptMap[t.department].total++;
+    if (t.status === 'closed') deptMap[t.department].closed++;
+  }
+  const departments = Object.entries(deptMap)
+    .map(([name, d]) => ({
+      name,
+      total: d.total,
+      closed: d.closed,
+      share: total > 0 ? ((d.total / total) * 100).toFixed(1) : '0.0',
+      resolved: d.total > 0 ? ((d.closed / d.total) * 100).toFixed(0) : '0',
+    }))
+    .sort((a, b) => b.total - a.total);
+
+  return { total, closed, open, resolutionRate, avgTreatmentMs, departments };
+}
+
+/** Build bar-chart data grouped by date labels */
+function computeChartBars(tickets, periodKey) {
+  const now = new Date();
+
+  // Define buckets based on period
+  let buckets = []; // { label, start, end }
+
+  switch (periodKey) {
+    case 'today': {
+      const base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const pairs = [
+        ['08h-10h', 8, 10], ['10h-12h', 10, 12], ['12h-14h', 12, 14],
+        ['14h-16h', 14, 16], ['16h-18h', 16, 18],
+      ];
+      for (const [label, sh, eh] of pairs) {
+        buckets.push({
+          label,
+          start: new Date(base.getFullYear(), base.getMonth(), base.getDate(), sh),
+          end: new Date(base.getFullYear(), base.getMonth(), base.getDate(), eh),
+        });
+      }
+      break;
+    }
+    case '7days': {
+      const dayNames = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        const end = new Date(start);
+        end.setDate(end.getDate() + 1);
+        buckets.push({ label: dayNames[start.getDay()], start, end });
+      }
+      break;
+    }
+    case 'month': {
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      for (let w = 0; w < 4; w++) {
+        const start = new Date(monthStart);
+        start.setDate(start.getDate() + w * 7);
+        const end = new Date(start);
+        end.setDate(end.getDate() + 7);
+        buckets.push({ label: `Semaine ${w + 1}`, start, end });
+      }
+      break;
+    }
+    case 'semester':
+    case 'year': {
+      const monthLabels = ['Janv.', 'Févr.', 'Mars', 'Avr.', 'Mai', 'Juin', 'Juil.', 'Août', 'Sept.', 'Oct.', 'Nov.', 'Déc.'];
+      const m = now.getMonth();
+      let startMonth, startYear, count;
+      if (periodKey === 'semester') {
+        count = 6;
+        if (m >= 8) { startMonth = 8; startYear = now.getFullYear(); }
+        else if (m <= 1) { startMonth = 8; startYear = now.getFullYear() - 1; }
+        else { startMonth = 2; startYear = now.getFullYear(); }
+      } else {
+        count = 12;
+        startYear = m >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+        startMonth = 8; // September
+      }
+      for (let i = 0; i < count; i++) {
+        const mIdx = (startMonth + i) % 12;
+        const yr = startYear + Math.floor((startMonth + i) / 12);
+        const start = new Date(yr, mIdx, 1);
+        const end = new Date(yr, mIdx + 1, 1);
+        if (start > now) break;
+        buckets.push({ label: monthLabels[mIdx], start, end });
+      }
+      break;
+    }
+    default:
+      break;
+  }
+
+  return buckets.map((b) => {
+    const inBucket = tickets.filter((t) => {
+      const d = new Date(t.createdAt);
+      return d >= b.start && d < b.end;
+    });
+    const resolved = inBucket.filter((t) => t.status === 'closed').length;
+    const unresolved = inBucket.length - resolved;
+    const total = inBucket.length;
+    const resolvedPct = total > 0 ? Math.round((resolved / total) * 100) : 0;
+    const unresolvedPct = total > 0 ? 100 - resolvedPct : 0;
+    return [b.label, unresolvedPct, resolvedPct, unresolved, resolved];
+  });
+}
+
+const PERIOD_KEYS = [
+  { key: 'today', label: 'Aujourd\'hui' },
+  { key: '7days', label: '7 derniers jours' },
+  { key: 'month', label: 'Ce mois-ci' },
+  { key: 'semester', label: 'Semestre' },
+  { key: 'year', label: 'Année' },
 ];
 
-const DEPARTMENT_OPTIONS = ['Tous les départements (13 services)', ...DEPARTMENTS.map(([name]) => name)];
-
-const TICKET_TYPES_ALL = [
-  ['Pédagogie & Notes d’examen', 38, 'blue'],
-  ['Accès ENT, Moodle & Clés Wi-Fi', 26, 'cobalt'],
-  ['Conventions de Stage & PFE', 16, 'violet'],
-  ['Attestations & Administratif', 12, 'slate'],
-  ['Suggestions de Vie Étudiante', 8, 'green'],
-];
-
-const TICKET_TYPES_BY_DEPT = {
-  'Service Scolarité': [
-    ['Attestations & Administratif', 42, 'slate'],
-    ['Pédagogie & Notes d\'examen', 28, 'blue'],
-    ['Accès ENT, Moodle & Clés Wi-Fi', 14, 'cobalt'],
-    ['Conventions de Stage & PFE', 10, 'violet'],
-    ['Suggestions de Vie Étudiante', 6, 'green'],
-  ],
-  'Service IT': [
-    ['Accès ENT, Moodle & Clés Wi-Fi', 52, 'cobalt'],
-    ['Pédagogie & Notes d\'examen', 18, 'blue'],
-    ['Attestations & Administratif', 15, 'slate'],
-    ['Suggestions de Vie Étudiante', 10, 'green'],
-    ['Conventions de Stage & PFE', 5, 'violet'],
-  ],
-  'Département licence Informatique': [
-    ['Pédagogie & Notes d\'examen', 55, 'blue'],
-    ['Accès ENT, Moodle & Clés Wi-Fi', 20, 'cobalt'],
-    ['Conventions de Stage & PFE', 12, 'violet'],
-    ['Attestations & Administratif', 8, 'slate'],
-    ['Suggestions de Vie Étudiante', 5, 'green'],
-  ],
-  'Service Stage': [
-    ['Conventions de Stage & PFE', 58, 'violet'],
-    ['Attestations & Administratif', 22, 'slate'],
-    ['Pédagogie & Notes d\'examen', 10, 'blue'],
-    ['Accès ENT, Moodle & Clés Wi-Fi', 6, 'cobalt'],
-    ['Suggestions de Vie Étudiante', 4, 'green'],
-  ],
-  'Département Prepa_Ingénieur': [
-    ['Pédagogie & Notes d\'examen', 48, 'blue'],
-    ['Accès ENT, Moodle & Clés Wi-Fi', 24, 'cobalt'],
-    ['Attestations & Administratif', 14, 'slate'],
-    ['Conventions de Stage & PFE', 8, 'violet'],
-    ['Suggestions de Vie Étudiante', 6, 'green'],
-  ],
-  'Service Finance': [
-    ['Attestations & Administratif', 45, 'slate'],
-    ['Pédagogie & Notes d\'examen', 25, 'blue'],
-    ['Conventions de Stage & PFE', 15, 'violet'],
-    ['Accès ENT, Moodle & Clés Wi-Fi', 10, 'cobalt'],
-    ['Suggestions de Vie Étudiante', 5, 'green'],
-  ],
-  'Département Management': [
-    ['Pédagogie & Notes d\'examen', 44, 'blue'],
-    ['Conventions de Stage & PFE', 22, 'violet'],
-    ['Accès ENT, Moodle & Clés Wi-Fi', 16, 'cobalt'],
-    ['Attestations & Administratif', 11, 'slate'],
-    ['Suggestions de Vie Étudiante', 7, 'green'],
-  ],
-  'Service Admission': [
-    ['Attestations & Administratif', 50, 'slate'],
-    ['Accès ENT, Moodle & Clés Wi-Fi', 22, 'cobalt'],
-    ['Pédagogie & Notes d\'examen', 15, 'blue'],
-    ['Suggestions de Vie Étudiante', 8, 'green'],
-    ['Conventions de Stage & PFE', 5, 'violet'],
-  ],
-  'Service Student Success': [
-    ['Suggestions de Vie Étudiante', 35, 'green'],
-    ['Pédagogie & Notes d\'examen', 28, 'blue'],
-    ['Accès ENT, Moodle & Clés Wi-Fi', 18, 'cobalt'],
-    ['Attestations & Administratif', 12, 'slate'],
-    ['Conventions de Stage & PFE', 7, 'violet'],
-  ],
-  'Département FTA': [
-    ['Conventions de Stage & PFE', 40, 'violet'],
-    ['Pédagogie & Notes d\'examen', 30, 'blue'],
-    ['Accès ENT, Moodle & Clés Wi-Fi', 15, 'cobalt'],
-    ['Attestations & Administratif', 10, 'slate'],
-    ['Suggestions de Vie Étudiante', 5, 'green'],
-  ],
-  'Service qualité': [
-    ['Attestations & Administratif', 38, 'slate'],
-    ['Suggestions de Vie Étudiante', 25, 'green'],
-    ['Pédagogie & Notes d\'examen', 18, 'blue'],
-    ['Accès ENT, Moodle & Clés Wi-Fi', 12, 'cobalt'],
-    ['Conventions de Stage & PFE', 7, 'violet'],
-  ],
-  'Service coopération international': [
-    ['Conventions de Stage & PFE', 35, 'violet'],
-    ['Attestations & Administratif', 28, 'slate'],
-    ['Accès ENT, Moodle & Clés Wi-Fi', 18, 'cobalt'],
-    ['Pédagogie & Notes d\'examen', 12, 'blue'],
-    ['Suggestions de Vie Étudiante', 7, 'green'],
-  ],
-  'Service Marketing': [
-    ['Suggestions de Vie Étudiante', 40, 'green'],
-    ['Attestations & Administratif', 25, 'slate'],
-    ['Accès ENT, Moodle & Clés Wi-Fi', 18, 'cobalt'],
-    ['Pédagogie & Notes d\'examen', 12, 'blue'],
-    ['Conventions de Stage & PFE', 5, 'violet'],
-  ],
+const CHART_TITLES = {
+  today: { title: 'Flux Horaire de la Journée', desc: 'Tickets non résolus vs Tickets résolus par tranche horaire' },
+  '7days': { title: 'Évolution Quotidienne (7 derniers jours)', desc: 'Tickets non résolus vs Tickets résolus chaque jour' },
+  month: { title: 'Évolution Hebdomadaire du Flux', desc: 'Tickets non résolus vs Tickets résolus sur les 4 semaines' },
+  semester: { title: 'Flux Mensuel du Semestre', desc: 'Suivi mensuel des tickets non résolus vs résolus' },
+  year: { title: 'Flux Annuel Global', desc: 'Historique mensuel complet des tickets non résolus vs résolus' },
 };
 
-const PERIOD_DATA = {
-  'Aujourd’hui': {
-    kpis: [
-      { icon: 'receipt_long', iconClass: 'blue-icon', label: 'Total Réclamations & Suggestions', value: '47', suffix: 'tickets', change: '+5%', detail: '36 Réclamations (77%) · 11 Suggestions (23%)', changeIcon: 'arrow_upward' },
-      { icon: 'check_circle', iconClass: 'green-icon', label: 'Taux de Résolution', value: '89.4%', suffix: '', change: '+4.1%', detail: '42 résolus · 5 en cours', changeIcon: 'trending_up' },
-      { icon: 'schedule', iconClass: 'blue-icon', label: 'Délai Moyen de Traitement', value: '3h 45m', suffix: '', change: '-22% plus rapide', detail: 'Objectif journalier < 6h respecté', changeIcon: 'speed' },
-      { icon: 'star', iconClass: 'amber-icon', label: 'Satisfaction Étudiante (CSAT)', value: '4.6', suffix: '/ 5', change: '92% positifs', detail: 'Basé sur 28 avis formulés aujourd’hui', changeIcon: 'thumb_up' },
-    ],
-    chart: {
-      title: 'Flux Horaire de la Journée',
-      description: 'Tickets non résolus vs Tickets résolus par tranche horaire',
-      unresolvedTotal: '5',
-      resolvedTotal: '42',
-      bars: [
-        ['08h-10h', 15, 85, 1, 6],
-        ['10h-12h', 25, 87, 2, 13],
-        ['12h-14h', 12, 88, 1, 8],
-        ['14h-16h', 10, 92, 1, 11],
-        ['16h-18h', 0, 100, 0, 4],
-      ],
-      note: 'Pic d’activité constaté entre 10h et 12h (pause matinale et accueil guichet scolarité).',
-      capacityNote: 'Capacité de traitement moyenne : ~6 tickets/heure',
-    },
-    departments: [
-      ['Service Scolarité', 'Pôle Central', 10, '21.3%', 88],
-      ['Service IT', 'Infrastructure & ENT', 8, '17.0%', 91],
-      ['Département licence Informatique', 'Pédagogie', 6, '12.8%', 85],
-      ['Service Stage', 'Conventions & PFE', 5, '10.6%', 94],
-      ['Département Prepa_Ingénieur', 'Pédagogie', 4, '8.5%', 82],
-      ['Service Finance', 'Comptabilité', 4, '8.5%', 80],
-      ['Département Management', 'Business School', 3, '6.4%', 90],
-      ['Service Admission', 'Inscriptions', 2, '4.3%', 95],
-      ['Service Student Success', 'Accompagnement', 2, '4.3%', 92],
-      ['Département FTA', 'Alternance', 1, '2.1%', 85],
-      ['Service qualité', 'Audit & Process', 1, '2.1%', 98],
-      ['Service coopération international', 'Mobilité & Échanges', 1, '2.1%', 90],
-      ['Service Marketing', 'Communication', 0, '0.0%', 100],
-    ],
-  },
-
-  '7 derniers jours': {
-    kpis: [
-      { icon: 'receipt_long', iconClass: 'blue-icon', label: 'Total Réclamations & Suggestions', value: '318', suffix: 'tickets', change: '+8%', detail: '241 Réclamations (76%) · 77 Suggestions (24%)', changeIcon: 'arrow_upward' },
-      { icon: 'check_circle', iconClass: 'green-icon', label: 'Taux de Résolution', value: '86.8%', suffix: '', change: '+2.5%', detail: '276 résolus · 42 en cours', changeIcon: 'trending_up' },
-      { icon: 'schedule', iconClass: 'blue-icon', label: 'Délai Moyen de Traitement', value: '24h 30m', suffix: '', change: '-18% plus rapide', detail: 'Objectif hebdomadaire < 48h respecté', changeIcon: 'speed' },
-      { icon: 'star', iconClass: 'amber-icon', label: 'Satisfaction Étudiante (CSAT)', value: '4.4', suffix: '/ 5', change: '89% positifs', detail: 'Basé sur 195 avis formulés', changeIcon: 'thumb_up' },
-    ],
-    chart: {
-      title: 'Évolution Quotidienne (7 derniers jours)',
-      description: 'Tickets non résolus vs Tickets résolus chaque jour',
-      unresolvedTotal: '42',
-      resolvedTotal: '276',
-      bars: [
-        ['Mer', 18, 82, 5, 40],
-        ['Jeu', 22, 78, 6, 51],
-        ['Ven', 20, 80, 6, 43],
-        ['Sam', 10, 90, 1, 14],
-        ['Dim', 15, 85, 2, 8],
-        ['Lun', 35, 65, 10, 56],
-        ['Mar', 25, 75, 5, 54],
-      ],
-      note: 'Forte baisse le week-end, puis rebond d’activité le lundi matin dès la reprise.',
-      capacityNote: 'Capacité de traitement moyenne : ~45 tickets/jour',
-    },
-    departments: [
-      ['Service Scolarité', 'Pôle Central', 62, '19.5%', 83],
-      ['Service IT', 'Infrastructure & ENT', 48, '15.1%', 90],
-      ['Département licence Informatique', 'Pédagogie', 38, '11.9%', 87],
-      ['Service Stage', 'Conventions & PFE', 32, '10.1%', 93],
-      ['Département Prepa_Ingénieur', 'Pédagogie', 28, '8.8%', 85],
-      ['Service Finance', 'Comptabilité', 25, '7.9%', 79],
-      ['Département Management', 'Business School', 22, '6.9%', 88],
-      ['Service Admission', 'Inscriptions', 19, '6.0%', 95],
-      ['Service Student Success', 'Accompagnement', 14, '4.4%', 91],
-      ['Département FTA', 'Alternance', 11, '3.5%', 84],
-      ['Service qualité', 'Audit & Process', 8, '2.5%', 98],
-      ['Service coopération international', 'Mobilité & Échanges', 7, '2.2%', 89],
-      ['Service Marketing', 'Communication', 4, '1.2%', 96],
-    ],
-  },
-
-  'Ce mois-ci': {
-    kpis: [
-      { icon: 'receipt_long', iconClass: 'blue-icon', label: 'Total Réclamations & Suggestions', value: '1 428', suffix: 'tickets', change: '+12%', detail: '1 085 Réclamations (76%) · 343 Suggestions (24%)', changeIcon: 'arrow_upward' },
-      { icon: 'check_circle', iconClass: 'green-icon', label: 'Taux de Résolution', value: '84.6%', suffix: '', change: '+3.2%', detail: '1 208 résolus · 220 en cours', changeIcon: 'trending_up' },
-      { icon: 'schedule', iconClass: 'blue-icon', label: 'Délai Moyen de Traitement', value: '48h 20m', suffix: '', change: '-15% plus rapide', detail: 'Objectif < 72h respecté (91.8%)', changeIcon: 'speed' },
-      { icon: 'star', iconClass: 'amber-icon', label: 'Satisfaction Étudiante (CSAT)', value: '4.2', suffix: '/ 5', change: '86% positifs', detail: 'Basé sur 890 avis formulés', changeIcon: 'thumb_up' },
-    ],
-    chart: {
-      title: 'Évolution Hebdomadaire du Flux',
-      description: 'Comparaison dynamique : Tickets non résolus vs Tickets résolus sur les 4 semaines',
-      unresolvedTotal: '220',
-      resolvedTotal: '1 208',
-      bars: [
-        ['Semaine 1', 30, 70, '50', '280'],
-        ['Semaine 2', 28, 72, '46', '310'],
-        ['Semaine 3', 38, 62, '64', '308'],
-        ['Semaine 4', 35, 65, '60', '310'],
-      ],
-      note: 'Répartition des tickets non résolus et résolus sur les quatre semaines de la période sélectionnée.',
-      capacityNote: 'Capacité de traitement moyenne : ~42 tickets/jour',
-    },
-    departments: DEPARTMENTS,
-  },
-
-  'Semestre 1': {
-    kpis: [
-      { icon: 'receipt_long', iconClass: 'blue-icon', label: 'Total Réclamations & Suggestions', value: '5 240', suffix: 'tickets', change: '+14.8%', detail: '3 980 Réclamations (76%) · 1 260 Suggestions (24%)', changeIcon: 'arrow_upward' },
-      { icon: 'check_circle', iconClass: 'green-icon', label: 'Taux de Résolution', value: '88.2%', suffix: '', change: '+4.6%', detail: '4 621 résolus · 619 en cours', changeIcon: 'trending_up' },
-      { icon: 'schedule', iconClass: 'blue-icon', label: 'Délai Moyen de Traitement', value: '42h 10m', suffix: '', change: '-19% plus rapide', detail: 'Objectif S1 respecté sur 11/13 départements', changeIcon: 'speed' },
-      { icon: 'star', iconClass: 'amber-icon', label: 'Satisfaction Étudiante (CSAT)', value: '4.3', suffix: '/ 5', change: '88% positifs', detail: 'Basé sur 3 410 avis formulés au S1', changeIcon: 'thumb_up' },
-    ],
-    chart: {
-      title: 'Flux Mensuel du Semestre 1',
-      description: 'Suivi mensuel des tickets non résolus vs résolus de Septembre à Février',
-      unresolvedTotal: '619',
-      resolvedTotal: '4 621',
-      bars: [
-        ['Sept.', 30, 70, '170', '950'],
-        ['Oct.', 35, 65, '158', '1 157'],
-        ['Nov.', 25, 75, '95', '890'],
-        ['Déc.', 20, 80, '65', '655'],
-        ['Janv.', 22, 78, '65', '785'],
-        ['Févr.', 18, 82, '26', '624'],
-      ],
-      note: 'Concentration majeure en début de semestre (septembre/octobre) avant stabilisation rapide.',
-      capacityNote: 'Capacité moyenne semestrielle : ~48 tickets/jour',
-    },
-    departments: [
-      ['Service Scolarité', 'Pôle Central', 1042, '19.9%', 84],
-      ['Service IT', 'Infrastructure & ENT', 770, '14.7%', 91],
-      ['Département licence Informatique', 'Pédagogie', 618, '11.8%', 88],
-      ['Service Stage', 'Conventions & PFE', 520, '9.9%', 93],
-      ['Département Prepa_Ingénieur', 'Pédagogie', 460, '8.8%', 86],
-      ['Service Finance', 'Comptabilité', 410, '7.8%', 82],
-      ['Département Management', 'Business School', 360, '6.9%', 89],
-      ['Service Admission', 'Inscriptions', 312, '6.0%', 96],
-      ['Service Student Success', 'Accompagnement', 235, '4.5%', 92],
-      ['Département FTA', 'Alternance', 178, '3.4%', 85],
-      ['Service qualité', 'Audit & Process', 132, '2.5%', 98],
-      ['Service coopération international', 'Mobilité & Échanges', 118, '2.3%', 90],
-      ['Service Marketing', 'Communication', 85, '1.6%', 96],
-    ],
-  },
-
-  'Année 2026-2027': {
-    kpis: [
-      { icon: 'receipt_long', iconClass: 'blue-icon', label: 'Total Réclamations & Suggestions', value: '9 850', suffix: 'tickets', change: '+18.2%', detail: '7 486 Réclamations (76%) · 2 364 Suggestions (24%)', changeIcon: 'arrow_upward' },
-      { icon: 'check_circle', iconClass: 'green-icon', label: 'Taux de Résolution', value: '90.5%', suffix: '', change: '+5.8%', detail: '8 914 résolus · 936 en cours', changeIcon: 'trending_up' },
-      { icon: 'schedule', iconClass: 'blue-icon', label: 'Délai Moyen de Traitement', value: '39h 45m', suffix: '', change: '-25% plus rapide', detail: 'Amélioration continue de la réactivité annuelle', changeIcon: 'speed' },
-      { icon: 'star', iconClass: 'amber-icon', label: 'Satisfaction Étudiante (CSAT)', value: '4.5', suffix: '/ 5', change: '91% positifs', detail: 'Basé sur 6 820 avis formulés sur l’année', changeIcon: 'thumb_up' },
-    ],
-    chart: {
-      title: 'Flux Annuel Global (2026-2027)',
-      description: 'Historique mensuel complet des tickets non résolus vs résolus',
-      unresolvedTotal: '936',
-      resolvedTotal: '8 914',
-      bars: [
-        ['Sept.', 28, 72, '140', '980'],
-        ['Oct.', 32, 68, '170', '1 210'],
-        ['Nov.', 24, 76, '110', '930'],
-        ['Déc.', 16, 84, '60', '700'],
-        ['Janv.', 20, 80, '80', '870'],
-        ['Févr.', 14, 86, '55', '755'],
-        ['Mars', 12, 88, '60', '950'],
-        ['Avr.', 10, 90, '40', '870'],
-        ['Mai', 10, 90, '40', '800'],
-        ['Juin', 12, 88, '55', '995'],
-      ],
-      note: 'Performance record de résolution observée au second semestre grâce aux nouveaux workflows d’automatisation.',
-      capacityNote: 'Capacité globale annuelle : ~52 tickets/jour ouvré',
-    },
-    departments: [
-      ['Service Scolarité', 'Pôle Central', 1960, '19.9%', 87],
-      ['Service IT', 'Infrastructure & ENT', 1450, '14.7%', 93],
-      ['Département licence Informatique', 'Pédagogie', 1162, '11.8%', 91],
-      ['Service Stage', 'Conventions & PFE', 975, '9.9%', 95],
-      ['Département Prepa_Ingénieur', 'Pédagogie', 865, '8.8%', 89],
-      ['Service Finance', 'Comptabilité', 770, '7.8%', 85],
-      ['Département Management', 'Business School', 680, '6.9%', 92],
-      ['Service Admission', 'Inscriptions', 590, '6.0%', 97],
-      ['Service Student Success', 'Accompagnement', 440, '4.5%', 94],
-      ['Département FTA', 'Alternance', 335, '3.4%', 88],
-      ['Service qualité', 'Audit & Process', 248, '2.5%', 99],
-      ['Service coopération international', 'Mobilité & Échanges', 220, '2.2%', 93],
-      ['Service Marketing', 'Communication', 155, '1.6%', 98],
-    ],
-  },
-};
-
+// ─── Sub-components ─────────────────────────────────────────────────
 function Icon({ children, className = '' }) {
   return <span className={`material-symbols-outlined ${className}`}>{children}</span>;
 }
 
-function MetricCard({ icon, iconClass, label, value, suffix, change, detail, changeIcon = 'trending_up' }) {
+function MetricCard({ icon, iconClass, label, value, suffix, detail, changeIcon = 'trending_up' }) {
   return (
     <article className="stats-card metric-card">
       <div className="metric-main">
@@ -331,48 +253,94 @@ function MetricCard({ icon, iconClass, label, value, suffix, change, detail, cha
         <div className={`metric-icon ${iconClass}`}><Icon>{icon}</Icon></div>
       </div>
       <div className="metric-footer">
-        <span className="success-pill"><Icon>{changeIcon}</Icon>{change}</span>
+        <span className="success-pill"><Icon>{changeIcon}</Icon></span>
         <span className="metric-detail">{detail}</span>
       </div>
     </article>
   );
 }
 
+function PanelHeader({ title, description, legend = false, chartLegend = false, chartUnresolvedLabel, chartResolvedLabel }) {
+  return (
+    <div className="panel-header">
+      <div><h2>{title}</h2><p className="panel-description">{description}</p></div>
+      {legend && <div className="legend"><span><i className="blue-dot" />Volume</span><span><i className="green-dot" />Résolution</span></div>}
+      {chartLegend && (
+        <div className="legend">
+          <span><i className="red-dot" />{chartUnresolvedLabel || 'Non résolus'}</span>
+          <span><i className="green-dot" />{chartResolvedLabel || 'Résolus'}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Activity({ id, status, tone, title, department, time }) {
+  return <div className="activity-item"><div className="activity-top"><strong>{id}</strong><span className={`status-pill ${tone}`}>{status}</span></div><p>{title}</p><div className="activity-meta"><span>{department}</span><span>{time}</span></div></div>;
+}
+
+// ─── Main Component ─────────────────────────────────────────────────
 export default function TicketStatsPage({ onNavigate }) {
-  const [period, setPeriod] = useState('Ce mois-ci');
-  const [department, setDepartment] = useState(DEPARTMENT_OPTIONS[0]);
+  const [periodKey, setPeriodKey] = useState('month');
+  const [department, setDepartment] = useState('all');
   const [refreshing, setRefreshing] = useState(false);
+  const [allTickets, setAllTickets] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const currentPeriodData = PERIOD_DATA[period] || PERIOD_DATA['Ce mois-ci'];
+  const fetchData = useCallback(() => {
+    setLoading(true);
+    fetchAllTickets()
+      .then((tickets) => setAllTickets(tickets))
+      .catch(() => setAllTickets([]))
+      .finally(() => setLoading(false));
+  }, []);
 
-  const visibleDepartments = useMemo(
-    () => department === DEPARTMENT_OPTIONS[0]
-      ? currentPeriodData.departments
-      : currentPeriodData.departments.filter(([name]) => name === department),
-    [department, currentPeriodData],
-  );
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  const visibleTicketTypes = useMemo(
-    () => department === DEPARTMENT_OPTIONS[0]
-      ? TICKET_TYPES_ALL
-      : (TICKET_TYPES_BY_DEPT[department] || TICKET_TYPES_ALL),
-    [department],
-  );
+  // Derive unique departments from real data
+  const departmentOptions = useMemo(() => {
+    const depts = [...new Set(allTickets.map((t) => t.department).filter(Boolean))].sort();
+    return ['all', ...depts];
+  }, [allTickets]);
 
-  const ticketTotal = useMemo(
-    () => department === DEPARTMENT_OPTIONS[0]
-      ? currentPeriodData.kpis[0].value
-      : currentPeriodData.departments.find(([name]) => name === department)?.[2]?.toLocaleString('fr-FR') || '0',
-    [department, currentPeriodData],
-  );
+  // Filter by period, then by department
+  const filteredTickets = useMemo(() => {
+    let tickets = filterByPeriod(allTickets, periodKey);
+    if (department !== 'all') {
+      tickets = tickets.filter((t) => t.department === department);
+    }
+    return tickets;
+  }, [allTickets, periodKey, department]);
+
+  // Compute all stats
+  const stats = useMemo(() => computeStats(filteredTickets), [filteredTickets]);
+
+  // Chart bars
+  const chartBars = useMemo(() => computeChartBars(filteredTickets, periodKey), [filteredTickets, periodKey]);
+  const chartTotalUnresolved = chartBars.reduce((s, b) => s + b[3], 0);
+  const chartTotalResolved = chartBars.reduce((s, b) => s + b[4], 0);
+
+  // Recent 4 tickets (regardless of filter — always global)
+  const recentTickets = useMemo(() => allTickets.slice(0, 4), [allTickets]);
+
+  // KPIs computed from real data
+  const kpis = useMemo(() => [
+    { icon: 'receipt_long', iconClass: 'blue-icon', label: 'Total Tickets', value: stats.total.toLocaleString('fr-FR'), suffix: 'tickets', detail: `${stats.closed} résolus · ${stats.open} en cours`, changeIcon: 'arrow_upward' },
+    { icon: 'check_circle', iconClass: 'green-icon', label: 'Taux de Résolution', value: `${stats.resolutionRate}%`, suffix: '', detail: `${stats.closed} résolus sur ${stats.total}`, changeIcon: 'trending_up' },
+    { icon: 'schedule', iconClass: 'blue-icon', label: 'Délai Moyen de Traitement', value: formatDuration(stats.avgTreatmentMs), suffix: '', detail: stats.avgTreatmentMs > 0 ? `Basé sur ${allTickets.filter((t) => t.status === 'closed' && t.openedAt && t.closedAt).length} tickets résolus` : 'Aucune donnée de traitement', changeIcon: 'speed' },
+    { icon: 'star', iconClass: 'amber-icon', label: 'Satisfaction Étudiante (CSAT)', value: '—', suffix: '/ 5', detail: 'Aucune donnée disponible', changeIcon: 'thumb_up' },
+  ], [stats, allTickets]);
 
   const handleRefresh = () => {
     setRefreshing(true);
+    fetchData();
     window.setTimeout(() => setRefreshing(false), 500);
   };
 
+  const chartInfo = CHART_TITLES[periodKey] || CHART_TITLES.month;
+
+  // ─── PDF Export ───────────────────────────────────────────────────
   const exportPDF = async () => {
-    // Preload SESAME logo from local asset
     let logoDataUrl = null;
     try {
       const img = new Image();
@@ -402,10 +370,7 @@ export default function TicketStatsPage({ onNavigate }) {
     const MUTED = [82, 93, 128];
     const GREEN_D = [6, 95, 70];
     const WHITE = [255, 255, 255];
-    const formatReportNumber = (value) => {
-      const numericValue = Number(String(value).replace(/[^\d]/g, ''));
-      return Number.isNaN(numericValue) ? String(value) : numericValue.toLocaleString('en-US');
-    };
+    const RED = [220, 38, 38];
 
     const addNewPageIfNeeded = (needed) => {
       if (y + needed > doc.internal.pageSize.getHeight() - 14) {
@@ -414,7 +379,9 @@ export default function TicketStatsPage({ onNavigate }) {
       }
     };
 
-    // ─── Header bar ────────────────────────────────────────────────
+    const periodLabel = PERIOD_KEYS.find((p) => p.key === periodKey)?.label || periodKey;
+
+    // ─── Header bar ──────────────────────────────────────────────
     doc.setFillColor(...BLUE);
     doc.roundedRect(margin, y, contentW, 28, 3, 3, 'F');
     doc.setFont('helvetica', 'bold');
@@ -425,12 +392,8 @@ export default function TicketStatsPage({ onNavigate }) {
     doc.setFont('helvetica', 'normal');
     doc.text(`Université SESAME — Généré le ${new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}`, margin + 8, y + 20);
 
-    // SESAME logo right side
     if (logoDataUrl) {
-      // Keep the source aspect ratio instead of forcing the wide logo into a square.
-      const logoW = 34;
-      const logoH = 22;
-      doc.addImage(logoDataUrl, 'PNG', pageW - margin - logoW - 4, y + 3, logoW, logoH);
+      doc.addImage(logoDataUrl, 'PNG', pageW - margin - 38, y + 3, 34, 22);
     } else {
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(11);
@@ -439,222 +402,146 @@ export default function TicketStatsPage({ onNavigate }) {
     }
     y += 36;
 
-    // ─── Period & filter info ──────────────────────────────────────
+    // ─── Period & filter ─────────────────────────────────────────
     doc.setFillColor(240, 243, 250);
     doc.roundedRect(margin, y, contentW, 10, 2, 2, 'F');
     doc.setFontSize(8);
     doc.setTextColor(...MUTED);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Période : ${period}  |  Filtre : ${department}`, margin + 4, y + 6.5);
+    doc.text(`Période : ${periodLabel}  |  Filtre : ${department === 'all' ? 'Tous les départements' : department}`, margin + 4, y + 6.5);
     y += 16;
 
-    // ─── KPI Metrics ───────────────────────────────────────────────
+    // ─── KPI Metrics ─────────────────────────────────────────────
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
     doc.setTextColor(...DARK);
     doc.text('Indicateurs Clés', margin, y);
     y += 6;
 
-    const kpis = currentPeriodData.kpis.map((k) => ({
-      label: k.label,
-      value: `${formatReportNumber(k.value)} ${k.suffix || ''}`.trim(),
-      change: k.change,
-      detail: k.detail.replace(/\b(\d[\d ]*)\b/g, (match) => formatReportNumber(match)),
-    }));
-
     const cardW = (contentW - 9) / 4;
     kpis.forEach((kpi, i) => {
       const x = margin + i * (cardW + 3);
-      // Card background
       doc.setFillColor(...WHITE);
       doc.setDrawColor(220, 228, 240);
       doc.roundedRect(x, y, cardW, 28, 2, 2, 'FD');
-      // Label
       doc.setFontSize(6.5);
       doc.setTextColor(...MUTED);
       doc.setFont('helvetica', 'normal');
       doc.text(kpi.label, x + 3, y + 6);
-      // Value
       doc.setFontSize(14);
       doc.setTextColor(...DARK);
       doc.setFont('helvetica', 'bold');
-      doc.text(kpi.value, x + 3, y + 14.5);
-      // Change pill
-      doc.setFontSize(6);
-      doc.setTextColor(...GREEN_D);
-      doc.setFont('helvetica', 'bold');
-      doc.text(kpi.change, x + 3, y + 20);
-      // Detail
+      doc.text(`${kpi.value} ${kpi.suffix || ''}`.trim(), x + 3, y + 14.5);
       doc.setTextColor(...MUTED);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(5.5);
       const detailText = doc.splitTextToSize(kpi.detail, cardW - 6);
-      doc.text(detailText, x + 3, y + 24);
+      doc.text(detailText, x + 3, y + 22);
     });
     y += 36;
 
-    // ─── Flow chart ────────────────────────────────────────────────
-    addNewPageIfNeeded(55);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.setTextColor(...DARK);
-    doc.text(currentPeriodData.chart.title, margin, y);
-    doc.setFontSize(8);
-    doc.setTextColor(...MUTED);
-    doc.setFont('helvetica', 'normal');
-    doc.text(currentPeriodData.chart.description, margin, y + 5);
-
-    const RED = [220, 38, 38];
-
-    // Legend
-    const legendX = pageW - margin - 80;
-    doc.setFillColor(...RED);
-    doc.rect(legendX, y - 3, 4, 4, 'F');
-    doc.setFontSize(7);
-    doc.setTextColor(...DARK);
-    doc.text(`Non résolus (${formatReportNumber(currentPeriodData.chart.unresolvedTotal)})`, legendX + 6, y);
-    doc.setFillColor(...GREEN_D);
-    doc.rect(legendX + 42, y - 3, 4, 4, 'F');
-    doc.text(`Résolus (${formatReportNumber(currentPeriodData.chart.resolvedTotal)})`, legendX + 48, y);
-    y += 10;
-
-    const chartH = 38;
-    const barAreaW = contentW - 10;
-    const groupW = barAreaW / currentPeriodData.chart.bars.length;
-
-    // Draw baseline
-    doc.setDrawColor(220, 228, 240);
-    doc.line(margin, y + chartH, margin + barAreaW, y + chartH);
-
-    currentPeriodData.chart.bars.forEach(([label, unresolved, resolved, unresolvedTip, resolvedTip], i) => {
-      const cx = margin + 5 + i * groupW + groupW / 2;
-      const barW = groupW * 0.25;
-      // Unresolved bar (red)
-      const rH = (unresolved / 100) * chartH;
-      doc.setFillColor(...RED);
-      doc.roundedRect(cx - barW - 0.5, y + chartH - rH, barW, rH, 1, 1, 'F');
+    // ─── Bar Chart ───────────────────────────────────────────────
+    if (chartBars.length > 0) {
+      addNewPageIfNeeded(55);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7.5);
-      doc.setTextColor(...RED);
-      doc.text(formatReportNumber(unresolvedTip), cx - barW / 2 - 0.5, y + chartH - rH - 2, { align: 'center' });
-      // Resolved bar
-      const sH = (resolved / 100) * chartH;
-      doc.setFillColor(...GREEN_D);
-      doc.roundedRect(cx + 0.5, y + chartH - sH, barW, sH, 1, 1, 'F');
-      doc.setFontSize(7.5);
-      doc.setTextColor(...GREEN_D);
-      doc.text(formatReportNumber(resolvedTip), cx + barW / 2 + 0.5, y + chartH - sH - 2, { align: 'center' });
-      // Period label
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
-      doc.setTextColor(...MUTED);
-      doc.text(label, cx, y + chartH + 5, { align: 'center' });
-    });
-    y += chartH + 12;
-
-    doc.setFontSize(7);
-    doc.setTextColor(...MUTED);
-    doc.text(currentPeriodData.chart.capacityNote, margin, y);
-    y += 10;
-
-    // ─── Flow summary (compact) ────────────────────────────────────
-    const toCount = (value) => Number(String(value).replace(/[^\d]/g, '')) || 0;
-    const totalUnresolved = toCount(currentPeriodData.chart.unresolvedTotal);
-    const totalResolved = toCount(currentPeriodData.chart.resolvedTotal);
-    const totalRate = (totalUnresolved + totalResolved) > 0 ? `${((totalResolved / (totalUnresolved + totalResolved)) * 100).toFixed(1)}%` : '—';
-
-    doc.setFillColor(235, 242, 255);
-    doc.roundedRect(margin, y, contentW, 12, 2, 2, 'F');
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...GREEN_D);
-    doc.text(`Résolus : ${totalResolved.toLocaleString('en-US')}`, margin + 5, y + 7.5);
-    doc.setTextColor(220, 38, 38);
-    doc.text(`Non résolus : ${totalUnresolved.toLocaleString('en-US')}`, margin + 50, y + 7.5);
-    doc.setTextColor(...BLUE);
-    doc.text(`Taux résolution : ${totalRate}`, margin + 110, y + 7.5);
-    y += 18;
-
-    // ─── Department table ──────────────────────────────────────────
-    addNewPageIfNeeded(40);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.setTextColor(...DARK);
-    doc.text('Répartition par Département & Service', margin, y);
-    y += 3;
-
-    autoTable(doc, {
-      startY: y,
-      margin: { left: margin, right: margin },
-      head: [['Département', 'Catégorie', 'Tickets', 'Part', '% Résolu']],
-      body: visibleDepartments.map(([name, cat, total, share, res]) => [name, cat, total, share, `${res}%`]),
-      styles: { fontSize: 8, cellPadding: 2.5, lineColor: [220, 228, 240], lineWidth: 0.2 },
-      headStyles: { fillColor: BLUE, textColor: WHITE, fontStyle: 'bold', fontSize: 7.5 },
-      alternateRowStyles: { fillColor: [248, 250, 255] },
-      columnStyles: {
-        0: { fontStyle: 'bold', cellWidth: 55 },
-        2: { halign: 'right', cellWidth: 18 },
-        3: { halign: 'right', cellWidth: 16 },
-        4: { halign: 'right', cellWidth: 20, textColor: GREEN_D, fontStyle: 'bold' },
-      },
-    });
-    y = doc.lastAutoTable.finalY + 10;
-
-    // ─── Ticket Types ──────────────────────────────────────────────
-    addNewPageIfNeeded(40);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.setTextColor(...DARK);
-    doc.text('Nature des Demandes', margin, y);
-    y += 3;
-
-    autoTable(doc, {
-      startY: y,
-      margin: { left: margin, right: margin },
-      head: [['Type de demande', 'Proportion']],
-      body: visibleTicketTypes.map(([label, value]) => [label, `${value}%`]),
-      styles: { fontSize: 8, cellPadding: 2.5, lineColor: [220, 228, 240], lineWidth: 0.2 },
-      headStyles: { fillColor: BLUE, textColor: WHITE, fontStyle: 'bold', fontSize: 7.5 },
-      alternateRowStyles: { fillColor: [248, 250, 255] },
-      columnStyles: {
-        1: { halign: 'right', cellWidth: 25, fontStyle: 'bold' },
-      },
-    });
-    y = doc.lastAutoTable.finalY + 10;
-
-    // ─── SLA Alerts ────────────────────────────────────────────────
-    addNewPageIfNeeded(35);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.setTextColor(...DARK);
-    doc.text('Alertes en direct', margin, y);
-    doc.setFontSize(8);
-    doc.setTextColor(153, 27, 27);
-    doc.text('2 urgences', margin + 50, y);
-    y += 5;
-
-    const alerts = [
-      { title: 'Service Scolarité (14 tickets > 72h)', desc: 'Délivrance attestations de réussite master retardée suite aux inscriptions tardives.', color: [254, 242, 242] },
-      { title: 'Service IT (6 tickets critiques)', desc: 'Accès identifiants Moodle pour les nouveaux arrivants cycle préparatoire.', color: [255, 253, 240] },
-    ];
-
-    alerts.forEach((alert) => {
-      doc.setFillColor(...alert.color);
-      doc.roundedRect(margin, y, contentW, 14, 2, 2, 'F');
-      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.setTextColor(...DARK);
+      doc.text(chartInfo.title, margin, y);
       doc.setFontSize(8);
-      doc.setTextColor(153, 27, 27);
-      doc.text(alert.title, margin + 4, y + 5);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7);
       doc.setTextColor(...MUTED);
-      const descLines = doc.splitTextToSize(alert.desc, contentW - 8);
-      doc.text(descLines, margin + 4, y + 10);
-      y += 17;
-    });
-    y += 3;
+      doc.setFont('helvetica', 'normal');
+      doc.text(chartInfo.desc, margin, y + 5);
 
-    // ─── Recent Activity ───────────────────────────────────────────
+      const legendX = pageW - margin - 80;
+      doc.setFillColor(...RED);
+      doc.rect(legendX, y - 3, 4, 4, 'F');
+      doc.setFontSize(7);
+      doc.setTextColor(...DARK);
+      doc.text(`Non résolus (${chartTotalUnresolved})`, legendX + 6, y);
+      doc.setFillColor(...GREEN_D);
+      doc.rect(legendX + 42, y - 3, 4, 4, 'F');
+      doc.text(`Résolus (${chartTotalResolved})`, legendX + 48, y);
+      y += 10;
+
+      const chartH = 38;
+      const barAreaW = contentW - 10;
+      const groupW = barAreaW / chartBars.length;
+
+      doc.setDrawColor(220, 228, 240);
+      doc.line(margin, y + chartH, margin + barAreaW, y + chartH);
+
+      chartBars.forEach(([label, unresolved, resolved, unresolvedTip, resolvedTip], i) => {
+        const cx = margin + 5 + i * groupW + groupW / 2;
+        const barW = groupW * 0.25;
+        const rH = (unresolved / 100) * chartH;
+        doc.setFillColor(...RED);
+        if (rH > 0) doc.roundedRect(cx - barW - 0.5, y + chartH - rH, barW, rH, 1, 1, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(...RED);
+        doc.text(String(unresolvedTip), cx - barW / 2 - 0.5, y + chartH - rH - 2, { align: 'center' });
+        const sH = (resolved / 100) * chartH;
+        doc.setFillColor(...GREEN_D);
+        if (sH > 0) doc.roundedRect(cx + 0.5, y + chartH - sH, barW, sH, 1, 1, 'F');
+        doc.setFontSize(7.5);
+        doc.setTextColor(...GREEN_D);
+        doc.text(String(resolvedTip), cx + barW / 2 + 0.5, y + chartH - sH - 2, { align: 'center' });
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(...MUTED);
+        doc.text(label, cx, y + chartH + 5, { align: 'center' });
+      });
+      y += chartH + 12;
+
+      // Flow summary
+      const totalRate = (chartTotalUnresolved + chartTotalResolved) > 0
+        ? `${((chartTotalResolved / (chartTotalUnresolved + chartTotalResolved)) * 100).toFixed(1)}%` : '—';
+      doc.setFillColor(235, 242, 255);
+      doc.roundedRect(margin, y, contentW, 12, 2, 2, 'F');
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...GREEN_D);
+      doc.text(`Résolus : ${chartTotalResolved}`, margin + 5, y + 7.5);
+      doc.setTextColor(220, 38, 38);
+      doc.text(`Non résolus : ${chartTotalUnresolved}`, margin + 50, y + 7.5);
+      doc.setTextColor(...BLUE);
+      doc.text(`Taux résolution : ${totalRate}`, margin + 110, y + 7.5);
+      y += 18;
+    }
+
+    // ─── Department table ────────────────────────────────────────
+    if (stats.departments.length > 0) {
+      addNewPageIfNeeded(40);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.setTextColor(...DARK);
+      doc.text('Répartition par Département & Service', margin, y);
+      y += 3;
+
+      autoTable(doc, {
+        startY: y,
+        margin: { left: margin, right: margin },
+        head: [['Département', 'Tickets', 'Part (tickets)', 'Résolus']],
+        body: stats.departments.map((d) => [
+          d.name,
+          d.total,
+          `${d.total} / ${stats.total}`,
+          `${d.closed} / ${d.total}`,
+        ]),
+        styles: { fontSize: 8, cellPadding: 2.5, lineColor: [220, 228, 240], lineWidth: 0.2 },
+        headStyles: { fillColor: BLUE, textColor: WHITE, fontStyle: 'bold', fontSize: 7.5 },
+        alternateRowStyles: { fillColor: [248, 250, 255] },
+        columnStyles: {
+          0: { fontStyle: 'bold', cellWidth: 55 },
+          1: { halign: 'right', cellWidth: 18 },
+          2: { halign: 'right', cellWidth: 28 },
+          3: { halign: 'right', cellWidth: 24, textColor: GREEN_D, fontStyle: 'bold' },
+        },
+      });
+      y = doc.lastAutoTable.finalY + 10;
+    }
+
+    // ─── Recent Activity ─────────────────────────────────────────
     addNewPageIfNeeded(30);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
@@ -666,11 +553,15 @@ export default function TicketStatsPage({ onNavigate }) {
       startY: y,
       margin: { left: margin, right: margin },
       head: [['Référence', 'Statut', 'Description', 'Service', 'Temps']],
-      body: [
-        ['#REC-2026-941', 'Résolu', 'Demande de convention de stage anticipé', 'Service Stage', 'Il y a 12 min'],
-        ['#REC-2026-939', 'En cours', 'Erreur saisie note session de rattrapage BD', 'Licence Info', 'Il y a 34 min'],
-        ['#SUG-2026-118', 'En révision', 'Extension des horaires de la bibliothèque', 'Student Success', 'Il y a 1h 05'],
-      ],
+      body: recentTickets.length > 0
+        ? recentTickets.map((ticket) => [
+            `#TKT-${ticket.id}`,
+            mapStatus(ticket.status).label,
+            ticket.title,
+            ticket.department,
+            formatRelativeTime(ticket.createdAt),
+          ])
+        : [['—', '—', 'Aucun ticket récent', '—', '—']],
       styles: { fontSize: 7.5, cellPadding: 2.5, lineColor: [220, 228, 240], lineWidth: 0.2 },
       headStyles: { fillColor: BLUE, textColor: WHITE, fontStyle: 'bold', fontSize: 7 },
       alternateRowStyles: { fillColor: [248, 250, 255] },
@@ -682,7 +573,7 @@ export default function TicketStatsPage({ onNavigate }) {
     });
     y = doc.lastAutoTable.finalY + 12;
 
-    // ─── Footer on every page ──────────────────────────────────────
+    // ─── Footer on every page ────────────────────────────────────
     const totalPages = doc.internal.getNumberOfPages();
     for (let p = 1; p <= totalPages; p++) {
       doc.setPage(p);
@@ -699,15 +590,16 @@ export default function TicketStatsPage({ onNavigate }) {
     doc.save(`Rapport_Tickets_SESAME_${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
+  // ─── Render ───────────────────────────────────────────────────────
   return (
     <div className="ticket-stats-page">
       <header className="stats-topbar">
         <div>
           <h1>Statistiques Tickets</h1>
-          <p>Aperçu analytique de l’activité des tickets de support et réclamations étudiantes.</p>
+          <p>Aperçu analytique de l'activité des tickets de support et réclamations étudiantes.</p>
         </div>
         <div className="stats-actions">
-          <div className="date-chip"><Icon>calendar_today</Icon>Mardi 13 Octobre 2026</div>
+          <div className="date-chip"><Icon>calendar_today</Icon>{new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
           <button className="primary-button" type="button" onClick={exportPDF}>
             Exporter rapport
           </button>
@@ -718,20 +610,21 @@ export default function TicketStatsPage({ onNavigate }) {
         <section className="filter-bar">
           <div className="period-picker">
             <span className="stats-overline">Période :</span>
-            {PERIODS.map((item) => (
+            {PERIOD_KEYS.map((item) => (
               <button
-                key={item}
+                key={item.key}
                 type="button"
-                className={period === item ? 'filter-choice active' : 'filter-choice'}
-                onClick={() => setPeriod(item)}
+                className={periodKey === item.key ? 'filter-choice active' : 'filter-choice'}
+                onClick={() => setPeriodKey(item.key)}
               >
-                {item}
+                {item.label}
               </button>
             ))}
           </div>
           <div className="filter-actions">
             <select value={department} onChange={(event) => setDepartment(event.target.value)} aria-label="Filtrer par département">
-              {DEPARTMENT_OPTIONS.map((item) => <option key={item}>{item}</option>)}
+              <option value="all">Tous les départements ({departmentOptions.length - 1} services)</option>
+              {departmentOptions.filter((d) => d !== 'all').map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
             <button className="secondary-button" type="button" onClick={handleRefresh}>
               <Icon className={refreshing ? 'spin' : ''}>refresh</Icon>{refreshing ? 'Actualisation…' : 'Actualiser'}
@@ -739,122 +632,104 @@ export default function TicketStatsPage({ onNavigate }) {
           </div>
         </section>
 
-        <section className="metric-grid">
-          {currentPeriodData.kpis.map((kpi) => (
-            <MetricCard
-              key={kpi.label}
-              icon={kpi.icon}
-              iconClass={kpi.iconClass}
-              label={kpi.label}
-              value={kpi.value}
-              suffix={kpi.suffix}
-              change={kpi.change}
-              detail={kpi.detail}
-              changeIcon={kpi.changeIcon}
-            />
-          ))}
-        </section>
+        {loading ? (
+          <section className="metric-grid" style={{ textAlign: 'center', padding: '3rem', gridColumn: '1/-1' }}>
+            <p style={{ color: '#8896a6' }}>Chargement des données…</p>
+          </section>
+        ) : (
+          <>
+            <section className="metric-grid">
+              {kpis.map((kpi) => (
+                <MetricCard
+                  key={kpi.label}
+                  icon={kpi.icon}
+                  iconClass={kpi.iconClass}
+                  label={kpi.label}
+                  value={kpi.value}
+                  suffix={kpi.suffix}
+                  detail={kpi.detail}
+                  changeIcon={kpi.changeIcon}
+                />
+              ))}
+            </section>
 
-        <section className="analytics-grid">
-          <div className="analytics-main">
-            <article className="stats-card panel">
-              <PanelHeader
-                title={currentPeriodData.chart.title}
-                description={currentPeriodData.chart.description}
-                chartLegend
-                chartUnresolvedLabel={`Non résolus (${currentPeriodData.chart.unresolvedTotal})`}
-                chartResolvedLabel={`Résolus (${currentPeriodData.chart.resolvedTotal})`}
-              />
-              <div className="bar-chart">
-                {currentPeriodData.chart.bars.map(([label, unresolved, resolved, unrTip, resTip]) => (
-                  <div className="bar-group" key={label}>
-                    <div className="bars">
-                      <span className="received-bar bar-hover" style={{ height: `${unresolved}%` }} data-tip={`${unrTip} non résolus`} />
-                      <span className="resolved-bar bar-hover" style={{ height: `${resolved}%` }} data-tip={`${resTip} résolus`} />
+            <section className="analytics-grid">
+              <div className="analytics-main">
+                {/* ── Bar Chart ── */}
+                <article className="stats-card panel">
+                  <PanelHeader
+                    title={chartInfo.title}
+                    description={chartInfo.desc}
+                    chartLegend
+                    chartUnresolvedLabel={`Non résolus (${chartTotalUnresolved})`}
+                    chartResolvedLabel={`Résolus (${chartTotalResolved})`}
+                  />
+                  {chartBars.length > 0 ? (
+                    <div className="bar-chart">
+                      {chartBars.map(([label, unresolved, resolved, unrTip, resTip]) => (
+                        <div className="bar-group" key={label}>
+                          <div className="bars">
+                            <span className="received-bar bar-hover" style={{ height: `${unresolved}%` }} data-tip={`${unrTip} non résolus`} />
+                            <span className="resolved-bar bar-hover" style={{ height: `${resolved}%` }} data-tip={`${resTip} résolus`} />
+                          </div>
+                          <span>{label}</span>
+                        </div>
+                      ))}
                     </div>
-                    <span>{label}</span>
+                  ) : (
+                    <p style={{ color: '#8896a6', padding: '2rem', textAlign: 'center' }}>Aucune donnée pour cette période.</p>
+                  )}
+                </article>
+
+                {/* ── Department Breakdown ── */}
+                <article className="stats-card panel">
+                  <PanelHeader
+                    title="Répartition par Département & Service"
+                    description={`Volumes totaux, parts relatives et taux d'efficacité pour les ${stats.departments.length} départements.`}
+                    legend
+                  />
+                  <div className="department-list">
+                    {stats.departments.length === 0 && <p style={{ color: '#8896a6', padding: '1rem' }}>Aucun ticket pour cette période.</p>}
+                    {stats.departments.map((d) => (
+                      <div className="department-row" key={d.name}>
+                        <div className="department-heading">
+                          <div className="department-name"><strong>{d.name}</strong></div>
+                          <div className="department-values"><strong>{d.total} tickets</strong><span>{d.share}%</span><b>{d.closed} / {d.total} résolus</b></div>
+                        </div>
+                        <div className="progress-track"><span style={{ width: `${d.share}%` }} /></div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </article>
               </div>
-              <div className="chart-note"><span>{currentPeriodData.chart.note}</span><strong>{currentPeriodData.chart.capacityNote}</strong></div>
-            </article>
 
-            <article className="stats-card panel">
-              <PanelHeader
-                title="Répartition par Département & Service"
-                description={`Volumes totaux, parts relatives et taux d'efficacité pour les ${visibleDepartments.length} unités de SESAME.`}
-                legend
-              />
-              <div className="department-list">
-                {visibleDepartments.map(([name, category, total, share, resolved]) => (
-                  <div className="department-row" key={name}>
-                    <div className="department-heading">
-                      <div className="department-name"><strong>{name}</strong><span>{category}</span></div>
-                      <div className="department-values"><strong>{total} tickets</strong><span>{share}</span><b>{resolved}% résolu</b></div>
-                    </div>
-                    <div className="progress-track"><span style={{ width: share }} /></div>
+              <div className="analytics-side">
+                {/* ── Recent Activity ── */}
+                <article className="stats-card panel">
+                  <div className="activity-heading"><h2>Activité Récente</h2><button type="button" onClick={() => onNavigate?.('tickets')}>Voir historique</button></div>
+                  <div className="activity-list">
+                    {recentTickets.length === 0 && <p style={{ color: '#8896a6', fontSize: '0.9rem', padding: '1rem' }}>Aucun ticket récent.</p>}
+                    {recentTickets.map((ticket) => {
+                      const { label, tone } = mapStatus(ticket.status);
+                      return (
+                        <Activity
+                          key={ticket.id}
+                          id={`#TKT-${ticket.id}`}
+                          status={label}
+                          tone={tone}
+                          title={ticket.title}
+                          department={ticket.department}
+                          time={formatRelativeTime(ticket.createdAt)}
+                        />
+                      );
+                    })}
                   </div>
-                ))}
+                </article>
               </div>
-            </article>
-          </div>
-
-          <div className="analytics-side">
-            <article className="stats-card panel">
-              <h2>Nature des Demandes</h2>
-              <p className="panel-description">Typologie thématique des {ticketTotal} tickets{department !== DEPARTMENT_OPTIONS[0] ? ` — ${department}` : ''}.</p>
-              <div className="type-list">
-                {visibleTicketTypes.map(([label, value, color]) => (
-                  <div key={label} className="type-row">
-                    <div><span>{label}</span><strong>{value}%</strong></div>
-                    <div className="progress-track"><span className={color} style={{ width: `${value}%` }} /></div>
-                  </div>
-                ))}
-              </div>
-            </article>
-
-            <article className="stats-card panel">
-              <div className="alert-heading"><h2><Icon>warning</Icon>Alertes en direct</h2><span>2 urgences</span></div>
-              <div className="alert-list">
-                <Alert icon="notification_important" tone="critical" title="Service Scolarité (14 tickets > 72h)" description="Délivrance attestations de réussite master retardée suite aux inscriptions tardives." action="Assigner un agent de renfort" />
-                <Alert icon="alarm" tone="warning" title="Service IT (6 tickets critiques)" description="Accès identifiants Moodle pour les nouveaux arrivants cycle préparatoire." action="Consulter la file prioritaire" />
-              </div>
-            </article>
-
-            <article className="stats-card panel">
-              <div className="activity-heading"><h2>Activité Récente</h2><button type="button" onClick={() => onNavigate?.('tickets')}>Voir historique</button></div>
-              <div className="activity-list">
-                <Activity id="#REC-2026-941" status="Résolu" tone="resolved" title="Demande de convention de stage anticipé" department="Service Stage" time="Il y a 12 min" />
-                <Activity id="#REC-2026-939" status="En cours" tone="progress" title="Erreur saisie note session de rattrapage BD" department="Licence Info" time="Il y a 34 min" />
-                <Activity id="#SUG-2026-118" status="En révision" tone="review" title="Extension des horaires de la bibliothèque" department="Student Success" time="Il y a 1h 05" />
-              </div>
-            </article>
-          </div>
-        </section>
+            </section>
+          </>
+        )}
       </main>
     </div>
   );
-}
-
-function PanelHeader({ title, description, legend = false, chartLegend = false, chartUnresolvedLabel, chartResolvedLabel }) {
-  return (
-    <div className="panel-header">
-      <div><h2>{title}</h2><p className="panel-description">{description}</p></div>
-      {legend && <div className="legend"><span><i className="blue-dot" />Volume</span><span><i className="green-dot" />Résolution</span></div>}
-      {chartLegend && (
-        <div className="legend">
-          <span><i className="red-dot" />{chartUnresolvedLabel || 'Non résolus (220)'}</span>
-          <span><i className="green-dot" />{chartResolvedLabel || 'Résolus (1 208)'}</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Alert({ icon, tone, title, description, action }) {
-  return <div className={`alert-item ${tone}`}><Icon>{icon}</Icon><div><h3>{title}</h3><p>{description}</p><button type="button">{action} <Icon>arrow_forward</Icon></button></div></div>;
-}
-
-function Activity({ id, status, tone, title, department, time }) {
-  return <div className="activity-item"><div className="activity-top"><strong>{id}</strong><span className={`status-pill ${tone}`}>{status}</span></div><p>{title}</p><div className="activity-meta"><span>{department}</span><span>{time}</span></div></div>;
 }
