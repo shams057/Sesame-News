@@ -35,11 +35,21 @@ route.get('/tickets', async (req, res, next) => {
     if (!Number.isNaN(nbrPage) && nbrPage > 0) page = nbrPage;
 
     const where = {};
-    if (req.query.status && ['open', 'closed'].includes(req.query.status)) {
+    if (req.query.status && ['open', 'in_progress', 'closed'].includes(req.query.status)) {
       where.status = req.query.status;
     }
     if (req.query.department && DEPARTMENTS.includes(req.query.department)) {
       where.department = req.query.department;
+    }
+
+    if (req.query.unread === 'true') {
+      const unreadMessages = await db.ticketMessage.findAll({
+        where: { senderRole: 'user', adminReadAt: null },
+        attributes: ['ticketId'],
+        group: ['ticketId'],
+        raw: true,
+      });
+      where.id = { [Op.in]: unreadMessages.map((message) => message.ticketId) };
     }
 
     const tickets = await db.ticket.findAndCountAll({
@@ -49,8 +59,17 @@ route.get('/tickets', async (req, res, next) => {
       order: [['createdAt', 'DESC']],
     });
 
+    const ids = tickets.rows.map((ticket) => ticket.id);
+    const unreadRows = ids.length ? await db.ticketMessage.findAll({
+      where: { ticketId: { [Op.in]: ids }, senderRole: 'user', adminReadAt: null },
+      attributes: ['ticketId', [db.Sequelize.fn('COUNT', db.Sequelize.col('id')), 'unreadCount']],
+      group: ['ticketId'],
+      raw: true,
+    }) : [];
+    const unreadByTicket = new Map(unreadRows.map((row) => [Number(row.ticketId), Number(row.unreadCount)]));
+
     res.status(200).send({
-      content: tickets.rows,
+      content: tickets.rows.map((ticket) => ({ ...ticket.toJSON(), unreadChatCount: unreadByTicket.get(ticket.id) || 0 })),
       totalPages: Math.ceil(tickets.count / size),
       totalElements: tickets.count,
     });
@@ -82,7 +101,7 @@ route.get('/ticket-statistics', async (req, res, next) => {
       attributes: ['id', 'title', 'description', 'department', 'status', 'createdAt', 'openedAt', 'closedAt'],
       order: [['createdAt', 'DESC']],
     });
-    const open = tickets.filter((ticket) => ticket.status === 'open').length;
+    const open = tickets.filter((ticket) => ticket.status !== 'closed').length;
     const closed = tickets.length - open;
     const departments = new Map();
     const categories = new Map();
@@ -140,7 +159,16 @@ route.get('/mytickets', async (req, res, next) => {
       order: [['createdAt', 'DESC']],
     });
 
-    res.status(200).send({ content: tickets, totalElements: tickets.length });
+    const ids = tickets.map((ticket) => ticket.id);
+    const unreadRows = ids.length ? await db.ticketMessage.findAll({
+      where: { ticketId: { [Op.in]: ids }, senderRole: 'superadmin', userReadAt: null },
+      attributes: ['ticketId', [db.Sequelize.fn('COUNT', db.Sequelize.col('id')), 'unreadCount']],
+      group: ['ticketId'],
+      raw: true,
+    }) : [];
+    const unreadByTicket = new Map(unreadRows.map((row) => [Number(row.ticketId), Number(row.unreadCount)]));
+
+    res.status(200).send({ content: tickets.map((ticket) => ({ ...ticket.toJSON(), unreadChatCount: unreadByTicket.get(ticket.id) || 0 })), totalElements: tickets.length });
   } catch (error) {
     next(error);
   }
@@ -151,7 +179,7 @@ route.put('/myticket/:id', async (req, res) => {
   try {
     const userToken = await getUserToken(req);
     if (!userToken) return res.status(401).json({ error: 'Authentification requise' });
-    if (!['open', 'closed'].includes(req.body.status)) {
+    if (!['open', 'in_progress', 'closed'].includes(req.body.status)) {
       return res.status(400).json({ error: 'Statut invalide' });
     }
 
@@ -213,6 +241,9 @@ route.put('/ticket/:id', async (req, res) => {
     if (req.body.openedAt !== undefined) data.openedAt = req.body.openedAt;
 
     if (req.body.status !== undefined) {
+      if (!['open', 'in_progress', 'closed'].includes(req.body.status)) {
+        return res.status(400).json({ error: 'Statut invalide' });
+      }
       data.status = req.body.status;
       // Auto-set closedAt when closing
       if (req.body.status === 'closed' && !req.body.closedAt) {

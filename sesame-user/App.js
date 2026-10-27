@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import {
@@ -20,12 +20,14 @@ import NewsScreen from './src/screens/NewsScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import TicketsScreen from './src/screens/TicketsScreen';
 import { colors, LOGO_URL } from './src/theme/colors';
+import { io } from 'socket.io-client';
+import api, { BASE_URL } from './src/api/axios';
 
 const Stack = createNativeStackNavigator();
 
-function NavigationIcon({ name, active }) {
+function NavigationIcon({ name, active, unread }) {
   const glyph = name === 'news' ? '▤' : name === 'tickets' ? '▣' : '◌';
-  return <Text style={[styles.navIcon, active && styles.navIconActive]}>{glyph}</Text>;
+  return <View style={styles.navIconWrap}><Text style={[styles.navIcon, active && styles.navIconActive]}>{glyph}</Text>{unread && <View style={styles.navUnreadDot} />}</View>;
 }
 
 function ChatPopup({ visible, onClose, desktop }) {
@@ -44,12 +46,32 @@ function ChatPopup({ visible, onClose, desktop }) {
 function UserAppLayout({ desktop }) {
   const [activeTab, setActiveTab] = useState('news');
   const [chatVisible, setChatVisible] = useState(false);
-  const { user, logout } = useAuth();
+  const [unreadTicketIds, setUnreadTicketIds] = useState([]);
+  const { user, token, logout } = useAuth();
   const insets = useSafeAreaInsets();
   const activeTitle = activeTab === 'news' ? 'Actualités' : 'Mes tickets';
   const currentScreen = activeTab === 'news'
     ? <NewsScreen showHeader={false} />
-    : <TicketsScreen />;
+    : <TicketsScreen unreadTicketIds={unreadTicketIds} />;
+
+  const refreshUnread = useCallback(async () => {
+    if (!token) return;
+    try {
+      const response = await api.get('/ticket-chat/unread', { headers: { Authorization: `Bearer ${token}` } });
+      setUnreadTicketIds(response.data.ticketIds || []);
+    } catch (error) {
+      // Keep the latest known badge state during temporary network loss.
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) { setUnreadTicketIds([]); return undefined; }
+    refreshUnread();
+    const socket = io(BASE_URL, { auth: { token }, transports: ['websocket', 'polling'] });
+    socket.on('ticket:message', refreshUnread);
+    socket.on('ticket:read', refreshUnread);
+    return () => socket.disconnect();
+  }, [token, refreshUnread]);
 
   return (
     <View style={styles.appRoot}>
@@ -60,7 +82,7 @@ function UserAppLayout({ desktop }) {
             <Text style={styles.sideTitle}>SESAME</Text>
             {['news', 'tickets'].map((tab) => (
               <TouchableOpacity key={tab} onPress={() => setActiveTab(tab)} style={[styles.sideItem, activeTab === tab && styles.sideItemActive]}>
-                <NavigationIcon name={tab} active={activeTab === tab} />
+                <NavigationIcon name={tab} active={activeTab === tab} unread={tab === 'tickets' && unreadTicketIds.length > 0} />
                 <Text style={styles.sideItemText}>{tab === 'news' ? 'Actualités' : 'Mes tickets'}</Text>
               </TouchableOpacity>
             ))}
@@ -88,7 +110,7 @@ function UserAppLayout({ desktop }) {
             <View style={styles.bottomBar}>
               {['news', 'tickets'].map((tab) => (
                 <TouchableOpacity key={tab} accessibilityRole="button" accessibilityState={{ selected: activeTab === tab }} style={[styles.tabItem, activeTab === tab && styles.tabItemActive]} onPress={() => setActiveTab(tab)}>
-                  <NavigationIcon name={tab} active={activeTab === tab} />
+                  <NavigationIcon name={tab} active={activeTab === tab} unread={tab === 'tickets' && unreadTicketIds.length > 0} />
                   <Text style={[styles.tabLabel, activeTab === tab && styles.tabLabelActive]}>{tab === 'news' ? 'Actualités' : 'Tickets'}</Text>
                 </TouchableOpacity>
               ))}
@@ -155,6 +177,8 @@ const styles = StyleSheet.create({
   tabItem: { flex: 1, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 13, marginHorizontal: 6 },
   tabItemActive: { backgroundColor: '#EFF6FF' },
   navIcon: { fontSize: 19, color: '#64748B', fontWeight: '700' },
+  navIconWrap: { position: 'relative' },
+  navUnreadDot: { position: 'absolute', top: -2, right: -5, width: 9, height: 9, borderRadius: 5, backgroundColor: '#EF4444', borderWidth: 1.5, borderColor: '#fff' },
   navIconActive: { color: colors.primary },
   tabLabel: { fontSize: 11, fontWeight: '600', color: colors.textSoft, marginTop: 1 },
   tabLabelActive: { color: colors.primary, fontWeight: '700' },
