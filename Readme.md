@@ -249,3 +249,12 @@ No phone, USB cable, or ADB is required for this option.
 > 💡 **Note:** The web version connects directly to the backend on `http://localhost:3000`, so `adb reverse` is **not** needed. If API requests fail in the browser, make sure the backend allows cross-origin requests (CORS) from `http://localhost:8081`.
 
 ---
+
+## 📄 PDF Export Dependencies
+
+From the `sesame-superadmin` directory, install the PDF export packages with:
+
+```bash
+npm install jspdf
+npm install jspdf-autotable
+```

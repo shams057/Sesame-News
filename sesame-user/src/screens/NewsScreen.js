@@ -7,11 +7,132 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Alert,
+  Platform,
+  Share,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
-import api from '../api/axios';
-import NewsCard from '../components/NewsCard';
-import { colors } from '../theme/colors';
+import api, { BASE_URL } from '../api/axios';
+import MediaCard from '../components/MediaCard';
+import { colors, LOGO_URL } from '../theme/colors';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+import * as Clipboard from 'expo-clipboard';
+
+const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v'];
+
+function absoluteMediaUrl(source) {
+  if (!source) return '';
+  if (/^(https?:|data:|blob:)/i.test(source)) return source;
+  return `${BASE_URL}${source.startsWith('/') ? '' : '/'}${source}`;
+}
+
+function mediaForNews(item) {
+  let mediaItems = Array.isArray(item.media) ? item.media : [];
+  if (!mediaItems.length && item.path) mediaItems = [{ src: item.path }];
+
+  return mediaItems.map((entry) => {
+    const mediaEntry = typeof entry === 'string' ? { src: entry } : entry || {};
+    const src = absoluteMediaUrl(mediaEntry.src || mediaEntry.path);
+    const filename = (mediaEntry.filename || src.split('/').pop())?.split('?')[0];
+    const video = (mediaEntry.type === 'video') || VIDEO_EXTENSIONS.some((extension) => filename?.toLowerCase().endsWith(extension));
+    return {
+      ...mediaEntry,
+      type: video ? 'video' : 'image',
+      src,
+      filename,
+      alt: mediaEntry.alt || item.titre || '',
+      poster: mediaEntry.poster ? absoluteMediaUrl(mediaEntry.poster) : undefined,
+    };
+  }).filter((entry) => entry.src);
+}
+
+function timeAgo(value) {
+  if (!value) return '';
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return '';
+  const elapsed = Math.max(0, Date.now() - timestamp);
+  const minutes = Math.floor(elapsed / 60000);
+  if (minutes < 1) return 'à l’instant';
+  if (minutes < 60) return `${minutes}min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}j`;
+}
+
+function NewsMediaCard({ item }) {
+  const [sharing, setSharing] = useState(false);
+  const caption = item.caption || [item.titre, item.description].filter(Boolean).join(' — ');
+  const media = mediaForNews(item);
+  const handleShare = async (selectedMedia) => {
+    if (sharing) return;
+    const message = `${item.titre || ''}\n\n${item.description || ''}`.trim();
+    if (!selectedMedia?.src) {
+      await Share.share({ message, title: item.titre });
+      return;
+    }
+
+    setSharing(true);
+    try {
+      const filename = selectedMedia.filename || selectedMedia.src.split('/').pop().split('?')[0] || 'media';
+      if (Platform.OS === 'web') {
+        const browser = globalThis.navigator;
+        if (browser?.share) {
+          try {
+            const response = await fetch(selectedMedia.src);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const blob = await response.blob();
+            const file = new File([blob], filename, { type: blob.type || (selectedMedia.type === 'video' ? 'video/mp4' : 'image/jpeg') });
+            if (browser.canShare?.({ files: [file] })) {
+              await browser.share({ title: item.titre, text: message, files: [file] });
+            } else {
+              await browser.share({ title: item.titre, text: message, url: selectedMedia.src });
+            }
+            return;
+          } catch (error) {
+            if (error.name === 'AbortError') return;
+          }
+        }
+        await Share.share({ message: `${message}\n${selectedMedia.src}`.trim(), title: item.titre });
+        return;
+      }
+
+      const directory = FileSystem.cacheDirectory || FileSystem.documentDirectory;
+      if (!directory) throw new Error('Aucun dossier temporaire disponible');
+      const download = await FileSystem.downloadAsync(selectedMedia.src, `${directory}${filename}`);
+      if (download.status !== 200) throw new Error(`HTTP ${download.status}`);
+      await Clipboard.setStringAsync(message);
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(download.uri, {
+          dialogTitle: item.titre || 'Partager',
+          mimeType: selectedMedia.type === 'video' ? 'video/mp4' : 'image/*',
+        });
+      } else {
+        await Share.share({ message: `${message}\n${selectedMedia.src}`.trim(), title: item.titre });
+      }
+    } catch {
+      if (Platform.OS !== 'web') Alert.alert('Partage du média impossible', 'Le texte et le lien vont être partagés.');
+      await Share.share({ message: `${message}\n${selectedMedia.src}`.trim(), title: item.titre });
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  return (
+    <MediaCard
+      username={item.username || 'sesame'}
+      avatarSrc={item.avatarSrc || LOGO_URL}
+      verified={item.verified ?? true}
+      timeAgo={item.timeAgo || timeAgo(item.createdAt)}
+      caption={caption}
+      width={item.width || 468}
+      height={item.height || 520}
+      media={media}
+      sharing={sharing}
+      onShare={handleShare}
+    />
+  );
+}
 
 export default function NewsScreen() {
   const { user, token } = useAuth();
@@ -97,7 +218,7 @@ export default function NewsScreen() {
       <FlatList
         data={news}
         keyExtractor={(item) => String(item.id)}
-        renderItem={({ item }) => <NewsCard item={item} />}
+        renderItem={({ item }) => <NewsMediaCard item={item} />}
         contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl
@@ -144,6 +265,7 @@ const styles = StyleSheet.create({
   list: {
     padding: 16,
     paddingBottom: 40,
+    alignItems: 'center',
   },
   empty: {
     textAlign: 'center',

@@ -2,6 +2,7 @@ const express = require('express');
 const route = express.Router();
 const db = require('./../models');
 const { Op } = require('sequelize');
+let io;
 
 const DEPARTMENTS = [
   'Service Scolarité',
@@ -188,10 +189,19 @@ route.put('/myticket/:id', async (req, res) => {
     });
     if (!ticket) return res.status(404).json({ error: 'Ticket non trouvé' });
 
+    const previousStatus = ticket.status;
     await ticket.update({
       status: req.body.status,
       closedAt: req.body.status === 'closed' ? new Date() : null,
     });
+    if (io && previousStatus !== ticket.status) {
+      io.to(`user:${ticket.userId}`).emit('ticket:status', {
+        ticketId: ticket.id,
+        status: ticket.status,
+        closedAt: ticket.closedAt,
+        updatedAt: ticket.updatedAt,
+      });
+    }
     res.status(200).send(ticket);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -252,15 +262,27 @@ route.put('/ticket/:id', async (req, res) => {
     }
     if (req.body.closedAt !== undefined) data.closedAt = req.body.closedAt;
 
+    const previous = await db.ticket.findByPk(req.params.id);
+    if (!previous) return res.status(404).json({ error: 'Ticket non trouvé' });
     const [updated] = await db.ticket.update(data, { where: { id: req.params.id } });
     if (!updated) return res.status(404).json({ error: 'Ticket non trouvé' });
 
     const ticket = await db.ticket.findOne({ where: { id: req.params.id } });
+    if (io && ticket.userId && previous.status !== ticket.status) {
+      io.to(`user:${ticket.userId}`).emit('ticket:status', {
+        ticketId: ticket.id,
+        status: ticket.status,
+        closedAt: ticket.closedAt,
+        updatedAt: ticket.updatedAt,
+      });
+    }
     res.status(200).send(ticket);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
+
+route.setSocketServer = (socketServer) => { io = socketServer; };
 
 // DELETE ticket
 route.delete('/ticket/:id', (req, res) => {
