@@ -9,7 +9,8 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import api from '../api/axios';
+import api, { BASE_URL } from '../api/axios';
+import { io } from 'socket.io-client';
 import NewTicketModal from '../components/NewTicketModal';
 import TicketChatModal from '../components/TicketChatModal';
 import { useAuth } from '../context/AuthContext';
@@ -132,6 +133,27 @@ export default function TicketsScreen({ unreadTicketIds = [] }) {
     const timeout = setTimeout(fetchTickets, 0);
     return () => clearTimeout(timeout);
   }, [fetchTickets]);
+
+  useEffect(() => {
+    if (!token) return undefined;
+    const socket = io(BASE_URL, { auth: { token }, transports: ['websocket', 'polling'] });
+    socket.on('ticket:status', (update) => {
+      setTickets((current) => current.map((ticket) => {
+        if (Number(ticket.id) !== Number(update.ticketId)) return ticket;
+        return {
+          ...ticket,
+          rawStatus: update.status,
+          statut: update.status === 'closed' ? 'ferme' : update.status === 'in_progress' ? 'en_cours' : 'ouvert',
+          dateMiseAJour: update.updatedAt || update.closedAt || ticket.dateMiseAJour,
+        };
+      }));
+      setToast({
+        message: `Le statut du ticket #${update.ticketId} est maintenant « ${update.status === 'closed' ? 'Fermé' : update.status === 'in_progress' ? 'En cours' : 'Ouvert'} ».`,
+        type: 'success',
+      });
+    });
+    return () => socket.disconnect();
+  }, [token]);
 
   useEffect(() => {
     if (isWide && !selectedId && tickets.length) {

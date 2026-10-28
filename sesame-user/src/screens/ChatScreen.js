@@ -97,7 +97,23 @@ export default function ChatScreen({ compact = false, onClose }) {
     }
   };
 
+  const clearHistory = () => {
+    setMessages([
+      {
+        id: 'welcome',
+        role: 'assistant',
+        content: `Bonjour ${user?.firstname || ''} ! Chat réinitialisé. Posez-moi vos questions par écrit.`,
+        timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+      },
+    ]);
+  };
+
   const handleClearHistory = () => {
+    if (Platform.OS === 'web') {
+      if (globalThis.confirm('Voulez-vous réinitialiser le chat ?')) clearHistory();
+      return;
+    }
+
     Alert.alert(
       'Effacer la conversation',
       'Voulez-vous réinitialiser le chat ?',
@@ -106,16 +122,7 @@ export default function ChatScreen({ compact = false, onClose }) {
         {
           text: 'Effacer',
           style: 'destructive',
-          onPress: () => {
-            setMessages([
-              {
-                id: 'welcome',
-                role: 'assistant',
-                content: `Bonjour ${user?.firstname || ''} ! Chat réinitialisé. Posez-moi vos questions par écrit.`,
-                timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-              },
-            ]);
-          },
+          onPress: clearHistory,
         },
       ]
     );

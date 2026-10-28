@@ -49,6 +49,7 @@ var port=3000;
 const httpServer = http.createServer(app);
 const io = new Server(httpServer, { cors: { origin: '*', methods: ['GET', 'POST'] } });
 ticketChatRoutes.setSocketServer(io);
+ticketRoutes.setSocketServer(io);
 
 io.use(async (socket, next) => {
   try {

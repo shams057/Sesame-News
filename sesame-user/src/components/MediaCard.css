@@ -1,0 +1,189 @@
+.mc {
+  --mc-bg: #ffffff;
+  --mc-fg: #111827;
+  --mc-muted: #6b7280;
+  --mc-accent: #1a56db;
+  --mc-dot: #cbd5e1;
+  --mc-surface: #f3f4f6;
+
+  box-sizing: border-box;
+  max-width: 100%;
+  background: var(--mc-bg);
+  color: var(--mc-fg);
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  padding: 16px 0 14px;
+  flex: none;
+}
+
+.mc *,
+.mc *::before,
+.mc *::after {
+  box-sizing: border-box;
+}
+
+/* Header */
+.mc-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px 14px;
+}
+
+.mc-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #eff6ff;
+  color: #1a56db;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  font-weight: 700;
+  flex: none;
+}
+.mc-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.mc-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  flex: 1;
+  font-size: 15px;
+}
+.mc-username { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-time { color: var(--mc-muted); }
+.mc-verified { color: var(--mc-accent); flex: none; }
+
+/* Shared icon button */
+.mc-icon-btn {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 6px;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+}
+.mc-icon-btn:hover { background: rgba(26, 86, 219, 0.08); }
+.mc-icon-btn:disabled { opacity: 0.6; cursor: default; }
+.mc-sharing { width: 18px; height: 18px; border: 2px solid #bfdbfe; border-top-color: var(--mc-accent); border-radius: 50%; animation: mc-spin 0.7s linear infinite; }
+@keyframes mc-spin { to { transform: rotate(360deg); } }
+.mc-icon-btn:focus-visible,
+.mc-nav:focus-visible,
+.mc-dot:focus-visible,
+.mc-popover-item:focus-visible { outline: 2px solid var(--mc-accent); outline-offset: 2px; }
+
+/* Three-dots menu */
+.mc-menu { position: relative; }
+.mc-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 10;
+  min-width: 190px;
+  padding: 6px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.16);
+}
+.mc-popover-item {
+  appearance: none;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  color: var(--mc-fg);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+}
+.mc-popover-item:hover { background: #f3f4f6; }
+
+/* Media frame: strict size (set inline from props) */
+.mc-frame {
+  position: relative;
+  max-width: 100%;
+  background: var(--mc-surface);
+  overflow: hidden;
+  flex: none;
+}
+.mc-media {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+}
+
+/* Carousel arrows */
+.mc-nav {
+  appearance: none;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid #e4e7eb;
+  background: #fff;
+  color: #1a56db;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+.mc-nav-prev { left: 12px; }
+.mc-nav-next { right: 12px; }
+
+/* Dots */
+.mc-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 0 4px;
+}
+.mc-dot {
+  appearance: none;
+  width: 6px;
+  height: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--mc-dot);
+  cursor: pointer;
+}
+.mc-dot.is-active { background: var(--mc-accent); }
+
+/* Actions */
+.mc-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px 0;
+  min-height: 44px;
+}
+.mc-actions .mc-icon-btn { color: var(--mc-accent); }
+
+/* Caption */
+.mc-caption {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 4px 0 0;
+  padding: 0 20px;
+  font-size: 15px;
+}
+.mc-caption strong { font-weight: 600; }
