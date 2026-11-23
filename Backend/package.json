@@ -1,22 +1,60 @@
 {
-  "name": "backend",
-  "version": "1.0.0",
-  "main": "server.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "name": "sesame-news-backend",
+  "version": "2.0.0",
+  "private": true,
+  "description": "REST + WebSocket API for the Sesame News platform (news feed, support tickets, assistant).",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=20"
   },
-  "author": "JMA",
-  "license": "ISC",
-  "description": "",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "db:migrate": "sequelize-cli db:migrate",
+    "db:migrate:undo": "sequelize-cli db:migrate:undo",
+    "db:seed": "sequelize-cli db:seed:all",
+    "db:setup": "npm run db:migrate && npm run db:seed",
+    "create-admin": "node scripts/create-superadmin.js",
+    "lint": "eslint .",
+    "test": "jest --runInBand",
+    "docs": "node scripts/build-openapi.js",
+    "test-push": "node scripts/send-test-push.js",
+    "db:seed:demo": "node scripts/seed-demo.js"
+  },
+  "license": "UNLICENSED",
   "dependencies": {
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
-    "express": "^5.2.1",
+    "csv-parse": "^7.0.3",
+    "dotenv": "^18.0.10",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.5",
+    "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
-    "multer": "^2.4.0",
-    "mysql2": "^3.24.4",
+    "multer": "^2.5.0",
+    "mysql2": "^3.24.6",
+    "pino": "^10.4.0",
+    "pino-http": "^11.0.0",
     "sequelize": "^6.37.8",
+    "socket.io": "^4.8.4",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.15.0",
+    "globals": "^17.14.0",
+    "jest": "^30.5.2",
     "sequelize-cli": "^6.6.5",
-    "socket.io": "^4.8.4"
+    "socket.io-client": "^4.8.4",
+    "supertest": "^7.3.2"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "globalSetup": "<rootDir>/tests/globalSetup.js",
+    "setupFiles": [
+      "<rootDir>/tests/env.js"
+    ],
+    "testTimeout": 30000,
+    "globalTeardown": "<rootDir>/tests/globalTeardown.js"
   }
 }

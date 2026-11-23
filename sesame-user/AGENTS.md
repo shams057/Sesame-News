@@ -25,9 +25,16 @@ Run lint and typecheck before declaring any task done.
 
 ## Navigation & Routing
 
-- Use **Expo Router** for all navigation. Routes live in `src/app/` — every file there is a screen, `_layout.tsx` files define navigators. Keep non-route code (components, hooks, utils) outside `src/app/`.
-- Import `Link`, `router`, and `useLocalSearchParams` from `expo-router`.
-- Docs: https://docs.expo.dev/router/introduction.md
+- This app uses **React Navigation** (native-stack + bottom-tabs), not Expo Router. The navigator tree lives in `src/navigation/RootNavigator.js`: Login / forced password change / `Main` tabs (Feed, Agenda, Tickets, Profile — each a stack) + the `Assistant` modal.
+- Deep links (`sesame://…`, and paths on web) are declared in the `linking` config of `RootNavigator.js`; push-notification taps are routed through `targetFromNotification` in `src/notifications/push.js`.
+- Screens live in `src/screens/`, shared UI in `src/components/`, API access only through `src/api/client.js` (it injects the token and handles 401s).
+
+## Project conventions
+
+- Backend URL: `EXPO_PUBLIC_API_URL` (`.env.local`, or the EAS build profile). Never hard-code it.
+- Server state goes through `@tanstack/react-query`; realtime events invalidate queries in `src/realtime/SocketProvider.js` (one socket for the app).
+- Colors come from `useColors()` / `useStyles()` in `src/theme` (light + dark). Touch targets ≥ 44 px, every input has a visible label.
+- `npm test` (jest-expo) and `npx expo lint` must pass.
 
 ## Building with EAS
 

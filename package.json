@@ -1,0 +1,19 @@
+{
+  "name": "sesame-news",
+  "private": true,
+  "description": "Sesame News: API (Backend), back-office (sesame-superadmin) and student app (sesame-user).",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "install:all": "npm --prefix Backend ci && npm --prefix sesame-superadmin ci && npm --prefix sesame-user ci",
+    "dev:backend": "npm --prefix Backend run dev",
+    "dev:admin": "npm --prefix sesame-superadmin run dev",
+    "dev:user": "npm --prefix sesame-user run web",
+    "db:setup": "npm --prefix Backend run db:setup",
+    "lint": "npm --prefix Backend run lint && npm --prefix sesame-superadmin run lint && npm --prefix sesame-user run lint",
+    "test": "npm --prefix Backend test && npm --prefix sesame-superadmin test && npm --prefix sesame-user test",
+    "build:admin": "npm --prefix sesame-superadmin run build"
+  },
+  "license": "UNLICENSED"
+}

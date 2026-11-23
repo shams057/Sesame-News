@@ -1,0 +1,15 @@
+Copyright (c) 2026 Université SESAME — Projet Certix. Tous droits réservés.
+
+Ce logiciel (API, back-office et application Sesame News), son code source et
+sa documentation sont la propriété de l'Université SESAME. Aucune licence n'est
+accordée : toute copie, modification, distribution ou utilisation, en tout ou en
+partie, est interdite sans l'autorisation écrite préalable de l'Université SESAME.
+
+Les dépendances tierces utilisées par le projet restent soumises à leurs propres
+licences (voir le dossier node_modules de chaque application).
+
+---
+
+Copyright (c) 2026 SESAME University — Certix project. All rights reserved.
+No licence is granted. Copying, modifying, distributing or using this software,
+in whole or in part, requires prior written permission from SESAME University.

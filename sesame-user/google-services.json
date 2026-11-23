@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "255764246841",
+    "project_id": "sesame-news",
+    "storage_bucket": "sesame-news.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:255764246841:android:bc03c1a2abe8c84d2238e8",
+        "android_client_info": {
+          "package_name": "sesame.news"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB2j-5noDlZ1FhuRPZMRMnn1Ipl-t2BYSg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:255764246841:android:962545636b1603792238e8",
+        "android_client_info": {
+          "package_name": "tn.sesame.etudiant"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB2j-5noDlZ1FhuRPZMRMnn1Ipl-t2BYSg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
