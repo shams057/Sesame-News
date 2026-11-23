@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import api, { errorMessage } from '../api/client';
 import { MIN_TOUCH, radius, spacing, useColors, useStyles } from '../theme';
-import { Button, Chip, ErrorState, Loading, TextField } from '../components/ui';
+import { Button, Chip, ErrorState, KeyboardAvoidingScreen, Loading, TextField } from '../components/ui';
 
 export default function NewTicketScreen({ navigation }) {
   const colors = useColors();
@@ -39,7 +39,7 @@ export default function NewTicketScreen({ navigation }) {
   if (departments.isError) return <ErrorState message={errorMessage(departments.error)} onRetry={departments.refetch} />;
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }} keyboardVerticalOffset={90}>
+    <KeyboardAvoidingScreen>
       <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={{ gap: spacing.sm }}>
           <Text style={styles.label} accessibilityRole="header">Service concerné</Text>
@@ -76,7 +76,7 @@ export default function NewTicketScreen({ navigation }) {
         <Button title="Envoyer la demande" icon="send" onPress={submit} loading={submitting} />
         <Text style={styles.note}>Vous pourrez ajouter une pièce jointe (capture d’écran, PDF) dans la conversation après l’envoi.</Text>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAvoidingScreen>
   );
 }
 

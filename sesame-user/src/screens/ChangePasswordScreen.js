@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, Text } from 'react-native';
+import { ScrollView, Text } from 'react-native';
 import api, { errorMessage } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { radius, spacing, useStyles } from '../theme';
-import { Button, Card, TextField } from '../components/ui';
+import { Button, Card, KeyboardAvoidingScreen, TextField } from '../components/ui';
 import { notify } from '../utils/files';
 
 /**
@@ -38,7 +38,7 @@ export default function ChangePasswordScreen({ navigation, route }) {
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+    <KeyboardAvoidingScreen>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <Card style={styles.card}>
           {forced ? (
@@ -55,7 +55,7 @@ export default function ChangePasswordScreen({ navigation, route }) {
           {forced ? <Button title="Se déconnecter" variant="ghost" onPress={logout} /> : null}
         </Card>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAvoidingScreen>
   );
 }
 

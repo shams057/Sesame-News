@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { FlatList, Pressable, Text, TextInput, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
@@ -10,7 +10,7 @@ import { formatDateTime, formatTime } from '../utils/format';
 import { downloadAndShare, notify } from '../utils/files';
 import { confirm } from '../utils/confirm';
 import StatusBadge from '../components/StatusBadge';
-import { Button, ErrorState, IconButton, Loading } from '../components/ui';
+import { Button, ErrorState, IconButton, KeyboardAvoidingScreen, Loading } from '../components/ui';
 
 const REOPEN_DAYS = 14;
 const withinReopenWindow = (closedAt) => Boolean(closedAt) && Date.now() - new Date(closedAt).getTime() < REOPEN_DAYS * 86400000;
@@ -194,7 +194,7 @@ export default function TicketDetailScreen({ route, navigation }) {
   );
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90}>
+    <KeyboardAvoidingScreen style={styles.screen}>
       <FlatList
         ref={listRef}
         data={messages.data || []}
@@ -206,7 +206,7 @@ export default function TicketDetailScreen({ route, navigation }) {
         ListEmptyComponent={messages.isPending ? <Loading /> : null}
       />
       {footer}
-    </KeyboardAvoidingView>
+    </KeyboardAvoidingScreen>
   );
 }
 

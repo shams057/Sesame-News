@@ -1,10 +1,10 @@
 import React, { useRef, useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import { Image, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../auth/AuthContext';
 import { errorMessage } from '../api/client';
 import { radius, spacing, useStyles } from '../theme';
-import { Button, TextField } from '../components/ui';
+import { Button, KeyboardAvoidingScreen, TextField } from '../components/ui';
 
 const LOGO = require('../../assets/sesame-logo.png');
 
@@ -31,7 +31,7 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <KeyboardAvoidingScreen>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.card}>
             <Image source={LOGO} style={styles.logo} accessibilityLabel="SESAME — School of High-Tech, AI & Management" resizeMode="contain" />
@@ -64,7 +64,7 @@ export default function LoginScreen() {
             <Text style={styles.help}>Identifiants oubliés ? Contactez le service Scolarité pour obtenir un mot de passe temporaire.</Text>
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAvoidingScreen>
     </SafeAreaView>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, Text, TextInput, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,7 +7,7 @@ import api, { errorMessage } from '../api/client';
 import { MIN_TOUCH, radius, spacing, useColors, useStyles } from '../theme';
 import { confirm } from '../utils/confirm';
 import { notify } from '../utils/files';
-import { EmptyState, ErrorState, IconButton, Loading } from '../components/ui';
+import { EmptyState, ErrorState, IconButton, KeyboardAvoidingScreen, Loading } from '../components/ui';
 
 const SUGGESTIONS = ['Quand ont lieu les examens ?', 'Comment obtenir une attestation de scolarité ?', 'Quels sont les prochains événements ?'];
 
@@ -94,7 +94,7 @@ export default function AssistantScreen({ navigation }) {
   const busy = ask.isPending;
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90}>
+    <KeyboardAvoidingScreen style={styles.screen}>
       <FlatList
         ref={listRef}
         data={messages}
@@ -132,7 +132,7 @@ export default function AssistantScreen({ navigation }) {
         />
         <IconButton icon="send" color={input.trim() && !busy ? colors.primary : colors.textMuted} accessibilityLabel="Envoyer la question" onPress={() => send()} />
       </View>
-    </KeyboardAvoidingView>
+    </KeyboardAvoidingScreen>
   );
 }
 

@@ -1,8 +1,24 @@
-import React from 'react';
-import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
+import React, { useContext } from 'react';
+import { ActivityIndicator, KeyboardAvoidingView, Pressable, Text, TextInput, View } from 'react-native';
+import { HeaderHeightContext } from '@react-navigation/elements';
 import { Ionicons } from '@expo/vector-icons';
 import { MIN_TOUCH, radius, spacing, useColors, useStyles } from '../theme';
 import { formatDateTime } from '../utils/format';
+
+/**
+ * Keeps inputs above the keyboard on both platforms. Android apps are
+ * edge-to-edge since Expo SDK 54, so the window no longer shrinks when the
+ * keyboard opens: the padding has to be applied here as on iOS. The offset is
+ * the height of the navigation header above the screen (0 without one).
+ */
+export function KeyboardAvoidingScreen({ style, children }) {
+  const headerHeight = useContext(HeaderHeightContext) ?? 0;
+  return (
+    <KeyboardAvoidingView style={[{ flex: 1 }, style]} behavior="padding" keyboardVerticalOffset={headerHeight}>
+      {children}
+    </KeyboardAvoidingView>
+  );
+}
 
 export function Icon({ name, size = 20, color, style }) {
   const colors = useColors();
