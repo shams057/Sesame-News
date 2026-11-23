@@ -24,6 +24,9 @@ async function serializeAccount(role, account) {
     };
   }
   const department = account.departmentId ? await Department.findByPk(account.departmentId) : null;
+  const managed = account.role === 'owner' || !account.departmentId
+    ? []
+    : await Categorie.findAll({ where: { departmentId: account.departmentId }, order: [['libelle', 'ASC']] });
   return {
     role: 'superadmin',
     id: account.id,
@@ -31,6 +34,8 @@ async function serializeAccount(role, account) {
     displayName: account.displayName,
     adminRole: account.role,
     department: department ? { id: department.id, name: department.name } : null,
+    // Student classes this admin manages (all of their department's classes).
+    managedCategories: managed.map((category) => ({ id: category.id, libelle: category.libelle })),
   };
 }
 

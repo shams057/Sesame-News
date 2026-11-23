@@ -52,7 +52,7 @@ function ProfileModal({ onClose }) {
       )}
     >
       <form id="profile-form" className="stack" onSubmit={save}>
-        <p className="muted small">Identifiant : <strong>{account.login}</strong> · {account.adminRole === 'owner' ? 'Administrateur principal' : 'Agent'}{account.department ? ` · ${account.department.name}` : ''}</p>
+        <p className="muted small">Identifiant : <strong>{account.login}</strong> · {account.adminRole === 'owner' ? 'Super administrateur' : 'Administrateur de service'}{account.department ? ` · ${account.department.name}` : ''}</p>
         <TextField label="Nom affiché" value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={100} required />
         <h3>Changer le mot de passe</h3>
         <TextField label="Mot de passe actuel" type="password" autoComplete="current-password" value={passwords.currentPassword}
@@ -105,14 +105,14 @@ export default function Layout() {
           {link('/news', 'news', 'Actualités')}
           <div className="sidebar-section">Annuaire</div>
           {link('/users', 'users', 'Étudiants')}
-          {link('/categories', 'tag', 'Catégories')}
+          {link('/categories', 'tag', 'Classes')}
           {link('/departments', 'building', 'Services')}
           {link('/admins', 'shield', isOwner ? 'Équipe & accès' : 'Équipe')}
         </nav>
         <div className="sidebar-footer">
           <div className="sidebar-user">
             <strong>{account.displayName || account.login}</strong>
-            {account.department ? account.department.name : isOwner ? 'Administrateur principal' : 'Agent'}
+            {account.department ? account.department.name : isOwner ? 'Super administrateur' : 'Administrateur de service'}
           </div>
           <button type="button" className="nav-link" onClick={() => setProfileOpen(true)}><Icon name="user" /><span>Mon profil</span></button>
           <button type="button" className="nav-link" onClick={onLogout}><Icon name="logout" /><span>Déconnexion</span></button>

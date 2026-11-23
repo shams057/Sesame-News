@@ -377,7 +377,7 @@
           "Staff"
         ],
         "summary": "List staff accounts",
-        "description": "Staff only.",
+        "description": "Staff only. Department admins are limited to their department; for students, to the classes of their department (no class change, no deletion).",
         "responses": {
           "200": {
             "description": "OK"
@@ -485,7 +485,7 @@
           "Students"
         ],
         "summary": "Search students",
-        "description": "Staff only.",
+        "description": "Staff only. Department admins are limited to their department; for students, to the classes of their department (no class change, no deletion).",
         "responses": {
           "200": {
             "description": "OK"
@@ -560,7 +560,7 @@
           "Students"
         ],
         "summary": "Create a student (temporary password returned once when none is given)",
-        "description": "Staff only.",
+        "description": "Staff only. Department admins are limited to their department; for students, to the classes of their department (no class change, no deletion).",
         "responses": {
           "200": {
             "description": "OK"
@@ -583,7 +583,7 @@
           "Students"
         ],
         "summary": "CSV import template",
-        "description": "Staff only.",
+        "description": "Staff only. Department admins are limited to their department; for students, to the classes of their department (no class change, no deletion).",
         "responses": {
           "200": {
             "description": "OK"
@@ -606,7 +606,7 @@
           "Students"
         ],
         "summary": "Import students from CSV (valid rows in one transaction, per-row errors, temporary passwords)",
-        "description": "Staff only.",
+        "description": "Staff only. Department admins are limited to their department; for students, to the classes of their department (no class change, no deletion).",
         "responses": {
           "200": {
             "description": "OK"
@@ -644,7 +644,7 @@
           "Students"
         ],
         "summary": "Get a student",
-        "description": "Staff only.",
+        "description": "Staff only. Department admins are limited to their department; for students, to the classes of their department (no class change, no deletion).",
         "responses": {
           "200": {
             "description": "OK"
@@ -675,7 +675,7 @@
           "Students"
         ],
         "summary": "Edit / deactivate a student",
-        "description": "Staff only.",
+        "description": "Staff only. Department admins are limited to their department; for students, to the classes of their department (no class change, no deletion).",
         "responses": {
           "200": {
             "description": "OK"
@@ -706,7 +706,7 @@
           "Students"
         ],
         "summary": "Delete a student (tickets are kept)",
-        "description": "Staff only.",
+        "description": "Staff with the owner role only.",
         "responses": {
           "200": {
             "description": "OK"
@@ -739,7 +739,7 @@
           "Students"
         ],
         "summary": "Generate a temporary password",
-        "description": "Staff only.",
+        "description": "Staff only. Department admins are limited to their department; for students, to the classes of their department (no class change, no deletion).",
         "responses": {
           "200": {
             "description": "OK"
@@ -771,8 +771,8 @@
         "tags": [
           "Students"
         ],
-        "summary": "Bulk activate / deactivate / set category (max 500 ids)",
-        "description": "Staff only.",
+        "summary": "Bulk activate / deactivate (staff) or set class (owner only); max 500 ids",
+        "description": "Staff only. Department admins are limited to their department; for students, to the classes of their department (no class change, no deletion).",
         "responses": {
           "200": {
             "description": "OK"
@@ -794,7 +794,7 @@
         "tags": [
           "Reference data"
         ],
-        "summary": "List categories (staff also get user counts)",
+        "summary": "List student classes (staff also get user counts and department)",
         "description": "Any authenticated account.",
         "responses": {
           "200": {
@@ -815,8 +815,8 @@
         "tags": [
           "Reference data"
         ],
-        "summary": "Create a category",
-        "description": "Staff only.",
+        "summary": "Create a class (libelle, departmentId)",
+        "description": "Staff with the owner role only.",
         "responses": {
           "200": {
             "description": "OK"
@@ -838,8 +838,8 @@
         "tags": [
           "Reference data"
         ],
-        "summary": "Rename a category",
-        "description": "Staff only.",
+        "summary": "Rename a class or change its department",
+        "description": "Staff with the owner role only.",
         "responses": {
           "200": {
             "description": "OK"
@@ -869,8 +869,8 @@
         "tags": [
           "Reference data"
         ],
-        "summary": "Delete an unused category (409 when used)",
-        "description": "Staff only.",
+        "summary": "Delete an unused class (409 when used)",
+        "description": "Staff with the owner role only.",
         "responses": {
           "200": {
             "description": "OK"
@@ -1011,7 +1011,7 @@
           "News (staff)"
         ],
         "summary": "List news",
-        "description": "Staff only.",
+        "description": "Staff only. Department admins are limited to their department; for students, to the classes of their department (no class change, no deletion).",
         "responses": {
           "200": {
             "description": "OK"
@@ -1076,7 +1076,7 @@
           "News (staff)"
         ],
         "summary": "Create news (multipart, up to 10 files)",
-        "description": "Staff only.",
+        "description": "Staff with the owner role only.",
         "responses": {
           "201": {
             "content": {
@@ -1122,7 +1122,7 @@
                   },
                   "categoryIds": {
                     "type": "string",
-                    "description": "JSON array of category ids"
+                    "description": "JSON array of class (category) ids"
                   },
                   "eventStart": {
                     "type": "string",
@@ -1159,7 +1159,7 @@
           "News (staff)"
         ],
         "summary": "Get news",
-        "description": "Staff only.",
+        "description": "Staff only. Department admins are limited to their department; for students, to the classes of their department (no class change, no deletion).",
         "responses": {
           "200": {
             "description": "OK"
@@ -1190,7 +1190,7 @@
           "News (staff)"
         ],
         "summary": "Edit news (multipart; removeMediaIds to delete files)",
-        "description": "Staff only.",
+        "description": "Staff with the owner role only.",
         "responses": {
           "200": {
             "description": "OK"
@@ -1221,7 +1221,7 @@
           "News (staff)"
         ],
         "summary": "Delete news and its files",
-        "description": "Staff only.",
+        "description": "Staff with the owner role only.",
         "responses": {
           "200": {
             "description": "OK"
@@ -1883,7 +1883,7 @@
           "Statistics"
         ],
         "summary": "Available periods",
-        "description": "Staff only.",
+        "description": "Staff only. Department admins are limited to their department; for students, to the classes of their department (no class change, no deletion).",
         "responses": {
           "200": {
             "description": "OK"
@@ -1906,7 +1906,7 @@
           "Statistics"
         ],
         "summary": "Ticket statistics",
-        "description": "Staff only.",
+        "description": "Staff only. Department admins are limited to their department; for students, to the classes of their department (no class change, no deletion).",
         "responses": {
           "200": {
             "description": "OK"
@@ -1952,7 +1952,7 @@
           "Statistics"
         ],
         "summary": "CSV export (one row per ticket)",
-        "description": "Staff only.",
+        "description": "Staff only. Department admins are limited to their department; for students, to the classes of their department (no class change, no deletion).",
         "responses": {
           "200": {
             "description": "OK"
@@ -1975,7 +1975,7 @@
           "Canned replies"
         ],
         "summary": "Replies usable for a department (?departmentId=)",
-        "description": "Staff only.",
+        "description": "Staff only. Department admins are limited to their department; for students, to the classes of their department (no class change, no deletion).",
         "responses": {
           "200": {
             "description": "OK"
@@ -1996,7 +1996,7 @@
           "Canned replies"
         ],
         "summary": "Create a canned reply",
-        "description": "Staff only.",
+        "description": "Staff only. Department admins are limited to their department; for students, to the classes of their department (no class change, no deletion).",
         "responses": {
           "200": {
             "description": "OK"
@@ -2019,7 +2019,7 @@
           "Canned replies"
         ],
         "summary": "Edit a canned reply",
-        "description": "Staff only.",
+        "description": "Staff only. Department admins are limited to their department; for students, to the classes of their department (no class change, no deletion).",
         "responses": {
           "200": {
             "description": "OK"
@@ -2050,7 +2050,7 @@
           "Canned replies"
         ],
         "summary": "Delete a canned reply",
-        "description": "Staff only.",
+        "description": "Staff only. Department admins are limited to their department; for students, to the classes of their department (no class change, no deletion).",
         "responses": {
           "200": {
             "description": "OK"

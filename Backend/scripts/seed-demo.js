@@ -16,13 +16,14 @@ const { hashPassword } = require('../src/services/authService');
 
 const PASSWORDS = { owner: 'Admin12345!', agent: 'Agent1234!', student: 'Etudiant1234!' };
 
-// One agent per department (login → exact department name in the seeder).
+// One admin per department (login → exact department name in the seeder).
+// A department admin manages the students of every class of its department.
 const DEPARTMENT_AGENTS = [
   ['agent.scolarite', 'Service Scolarité'],
   ['agent.stage', 'Service Stage'],
-  ['agent.informatique', 'Département licence Informatique'],
+  ['agent.informatique', 'Département Informatique'],
   ['agent.management', 'Département Management'],
-  ['agent.prepa', 'Département Prépa Ingénieur'],
+  ['agent.ing', 'Département ING'],
   ['agent.fta', 'Département FTA'],
   ['agent.it', 'Service IT'],
   ['agent.qualite', 'Service Qualité'],
@@ -33,18 +34,27 @@ const DEPARTMENT_AGENTS = [
   ['agent.studentsuccess', 'Service Student Success'],
 ];
 
+// Class names come from the classes migration (exact libellé).
+const LIM = 'LIM (Licence Informatique Multimédia)';
+const LGLSI = 'LGLSI (Licence Génie Logiciel et Systèmes Intelligents)';
+const LBIS = 'LBIS (Licence Business Information System)';
+const LSG = 'LSG (Licence Sciences de Gestion)';
 const STUDENTS = [
-  ['amine.benali', 'Amine', 'Ben Ali', 'Licence Informatique'],
-  ['sarra.trabelsi', 'Sarra', 'Trabelsi', 'Licence Informatique'],
-  ['youssef.gharbi', 'Youssef', 'Gharbi', 'Licence Informatique'],
-  ['lina.mansour', 'Lina', 'Mansour', 'Management'],
+  ['amine.benali', 'Amine', 'Ben Ali', LIM],
+  ['sarra.trabelsi', 'Sarra', 'Trabelsi', LGLSI],
+  ['youssef.gharbi', 'Youssef', 'Gharbi', LBIS],
+  ['lina.mansour', 'Lina', 'Mansour', LSG],
+  ['omar.haddad', 'Omar', 'Haddad', 'Cycle Préparatoire'],
+  ['meriem.jlassi', 'Meriem', 'Jlassi', 'Cycle Ingénieurs'],
+  ['karim.saidi', 'Karim', 'Saidi', 'FTA (Formation Temps Aménagé)'],
 ];
 
 async function upsertAdmin(login, displayName, role, departmentId, password) {
   const hashed = await hashPassword(password);
+  const values = { password: hashed, displayName, role, departmentId, isActive: true };
   const existing = await SuperAdmin.findOne({ where: { login } });
-  if (existing) return existing.update({ password: hashed, displayName, role, departmentId, isActive: true });
-  return SuperAdmin.create({ login, displayName, role, departmentId, password: hashed, isActive: true });
+  if (existing) return existing.update(values);
+  return SuperAdmin.create({ login, ...values });
 }
 
 async function main() {
@@ -53,22 +63,24 @@ async function main() {
   const departments = new Map((await Department.findAll()).map((department) => [department.name, department]));
   if (!departments.size) throw new Error('Aucun service en base : lancez d’abord `npm run db:setup`.');
 
-  const [info] = await Categorie.findOrCreate({ where: { libelle: 'Licence Informatique' } });
-  const [management] = await Categorie.findOrCreate({ where: { libelle: 'Management' } });
-  const categories = { 'Licence Informatique': info, Management: management };
+  const categories = new Map((await Categorie.findAll()).map((category) => [category.libelle, category]));
+  const missing = STUDENTS.map(([, , , name]) => name).find((name) => !categories.has(name));
+  if (missing) throw new Error(`Classe introuvable : ${missing} (lancez \`npm run db:migrate\`)`);
 
-  const admin = await upsertAdmin('admin', 'Administrateur', 'owner', null, PASSWORDS.owner);
-  await upsertAdmin('agent.general', 'Agent support (tous services)', 'agent', null, PASSWORDS.agent);
+  const admin = await upsertAdmin('admin', 'Super administrateur', 'owner', null, PASSWORDS.owner);
+  // The former all-departments demo agent does not fit the role model any more.
+  // Logins renamed or retired since earlier versions of this script.
+  await SuperAdmin.destroy({ where: { login: ['agent.general', 'agent.prepa'] } });
   for (const [login, departmentName] of DEPARTMENT_AGENTS) {
     const department = departments.get(departmentName);
     if (!department) throw new Error(`Service introuvable : ${departmentName}`);
-    await upsertAdmin(login, `Agent ${departmentName}`, 'agent', department.id, PASSWORDS.agent);
+    await upsertAdmin(login, `Admin ${departmentName}`, 'agent', department.id, PASSWORDS.agent);
   }
 
   const studentHash = await hashPassword(PASSWORDS.student);
   const students = {};
   for (const [login, firstname, lastname, category] of STUDENTS) {
-    const values = { firstname, lastname, categorieId: categories[category].id, password: studentHash, isActive: true, mustChangePassword: false };
+    const values = { firstname, lastname, categorieId: categories.get(category).id, password: studentHash, isActive: true, mustChangePassword: false };
     const existing = await User.findOne({ where: { login } });
     students[login] = existing ? await existing.update(values) : await User.create({ login, ...values });
   }
@@ -87,14 +99,14 @@ async function main() {
     });
     const workshop = await News.create({
       titre: 'Atelier IA générative pour les L3', superAdminId: admin.id, audienceAll: false, location: 'Labo 2',
-      description: 'Atelier pratique réservé aux étudiants de Licence Informatique.', eventStart: new Date(now + 10 * day),
+      description: 'Atelier pratique réservé aux étudiants des licences informatiques (LIM, LGLSI, LBIS).', eventStart: new Date(now + 10 * day),
     });
-    await NewsCategorie.create({ newsId: workshop.id, categorieId: info.id });
+    for (const name of [LIM, LGLSI, LBIS]) await NewsCategorie.create({ newsId: workshop.id, categorieId: categories.get(name).id });
     const seminar = await News.create({
       titre: 'Séminaire entrepreneuriat', superAdminId: admin.id, audienceAll: false, location: 'Amphi B',
-      description: 'Séminaire réservé aux étudiants en Management.', eventStart: new Date(now + 8 * day),
+      description: 'Séminaire réservé aux étudiants en Sciences de Gestion.', eventStart: new Date(now + 8 * day),
     });
-    await NewsCategorie.create({ newsId: seminar.id, categorieId: management.id });
+    await NewsCategorie.create({ newsId: seminar.id, categorieId: categories.get(LSG).id });
   }
 
   if (!(await Ticket.count())) {
@@ -114,10 +126,9 @@ async function main() {
   }
 
   console.log('Comptes de démonstration prêts :');
-  console.log(`  admin (administrateur principal) ......... ${PASSWORDS.owner}`);
-  console.log(`  agent.general (agent, tous services) ..... ${PASSWORDS.agent}`);
+  console.log(`  admin (super administrateur) ............ ${PASSWORDS.owner}`);
   DEPARTMENT_AGENTS.forEach(([login, name]) => console.log(`  ${login.padEnd(22)} ${name.padEnd(36)} ${PASSWORDS.agent}`));
-  STUDENTS.forEach(([login, , , category]) => console.log(`  ${login.padEnd(22)} étudiant · ${category.padEnd(25)} ${PASSWORDS.student}`));
+  STUDENTS.forEach(([login, , , category]) => console.log(`  ${login.padEnd(22)} étudiant · ${category.split(' (')[0].padEnd(25)} ${PASSWORDS.student}`));
   await sequelize.close();
 }
 

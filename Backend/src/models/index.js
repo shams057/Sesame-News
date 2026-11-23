@@ -16,6 +16,7 @@ const Department = sequelize.define('department', {
 
 const Categorie = sequelize.define('categorie', {
   libelle: { type: STRING(100), allowNull: false, unique: true },
+  departmentId: { type: INTEGER, allowNull: true },
 }, { tableName: 'categories' });
 
 // ─── Accounts ───────────────────────────────────────────────────────────────
@@ -156,6 +157,9 @@ const PushToken = sequelize.define('pushToken', {
 // ─── Associations (onDelete mirrors the migration) ──────────────────────────
 Department.hasMany(SuperAdmin, { foreignKey: 'departmentId' });
 SuperAdmin.belongsTo(Department, { foreignKey: 'departmentId', onDelete: 'SET NULL' });
+// Each student class belongs to a department; its admins manage those students.
+Department.hasMany(Categorie, { foreignKey: 'departmentId', as: 'classes' });
+Categorie.belongsTo(Department, { foreignKey: 'departmentId', as: 'department', onDelete: 'SET NULL' });
 
 Categorie.hasMany(User, { foreignKey: 'categorieId', onDelete: 'RESTRICT' });
 User.belongsTo(Categorie, { foreignKey: 'categorieId' });

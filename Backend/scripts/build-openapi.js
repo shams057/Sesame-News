@@ -37,26 +37,26 @@ const routes = [
   ['get', '/users/{id}', 'Students', 'Get a student', 'staff', { parameters: [idParam] }],
   ['patch', '/users/{id}', 'Students', 'Edit / deactivate a student', 'staff', { parameters: [idParam] }],
   ['post', '/users/{id}/reset-password', 'Students', 'Generate a temporary password', 'staff', { parameters: [idParam] }],
-  ['post', '/users/bulk', 'Students', 'Bulk activate / deactivate / set category (max 500 ids)', 'staff'],
-  ['delete', '/users/{id}', 'Students', 'Delete a student (tickets are kept)', 'staff', { parameters: [idParam] }],
-  ['get', '/categories', 'Reference data', 'List categories (staff also get user counts)', 'any'],
-  ['post', '/categories', 'Reference data', 'Create a category', 'staff'],
-  ['patch', '/categories/{id}', 'Reference data', 'Rename a category', 'staff', { parameters: [idParam] }],
-  ['delete', '/categories/{id}', 'Reference data', 'Delete an unused category (409 when used)', 'staff', { parameters: [idParam] }],
+  ['post', '/users/bulk', 'Students', 'Bulk activate / deactivate (staff) or set class (owner only); max 500 ids', 'staff'],
+  ['delete', '/users/{id}', 'Students', 'Delete a student (tickets are kept)', 'owner', { parameters: [idParam] }],
+  ['get', '/categories', 'Reference data', 'List student classes (staff also get user counts and department)', 'any'],
+  ['post', '/categories', 'Reference data', 'Create a class (libelle, departmentId)', 'owner'],
+  ['patch', '/categories/{id}', 'Reference data', 'Rename a class or change its department', 'owner', { parameters: [idParam] }],
+  ['delete', '/categories/{id}', 'Reference data', 'Delete an unused class (409 when used)', 'owner', { parameters: [idParam] }],
   ['get', '/departments', 'Reference data', 'List departments (students: active only)', 'any'],
   ['post', '/departments', 'Reference data', 'Create a department', 'owner'],
   ['patch', '/departments/{id}', 'Reference data', 'Edit / deactivate a department', 'owner', { parameters: [idParam] }],
   ['delete', '/departments/{id}', 'Reference data', 'Delete a department without tickets', 'owner', { parameters: [idParam] }],
   ['get', '/news', 'News (staff)', 'List news', 'staff', { parameters: [...page, q('q', { type: 'string' }), q('status', { enum: ['draft', 'published', 'scheduled', 'expired'] }), q('categorieId', { type: 'integer' })] }],
-  ['post', '/news', 'News (staff)', 'Create news (multipart, up to 10 files)', 'staff', { requestBody: multipart({
+  ['post', '/news', 'News (staff)', 'Create news (multipart, up to 10 files)', 'owner', { requestBody: multipart({
     titre: { type: 'string', maxLength: 200 }, description: { type: 'string' }, status: { enum: ['draft', 'published'] },
     publishAt: { type: 'string', format: 'date-time' }, pinned: { type: 'boolean' }, audienceAll: { type: 'boolean' },
-    categoryIds: { type: 'string', description: 'JSON array of category ids' }, eventStart: { type: 'string', format: 'date-time' },
+    categoryIds: { type: 'string', description: 'JSON array of class (category) ids' }, eventStart: { type: 'string', format: 'date-time' },
     eventEnd: { type: 'string', format: 'date-time' }, location: { type: 'string' }, expiresAt: { type: 'string', format: 'date-time' }, files: { type: 'array', items: { type: 'string', format: 'binary' } },
   }), responses: { 201: json(ref('News')) } }],
   ['get', '/news/{id}', 'News (staff)', 'Get news', 'staff', { parameters: [idParam] }],
-  ['patch', '/news/{id}', 'News (staff)', 'Edit news (multipart; removeMediaIds to delete files)', 'staff', { parameters: [idParam] }],
-  ['delete', '/news/{id}', 'News (staff)', 'Delete news and its files', 'staff', { parameters: [idParam] }],
+  ['patch', '/news/{id}', 'News (staff)', 'Edit news (multipart; removeMediaIds to delete files)', 'owner', { parameters: [idParam] }],
+  ['delete', '/news/{id}', 'News (staff)', 'Delete news and its files', 'owner', { parameters: [idParam] }],
   ['get', '/feed', 'Feed (students)', 'Visible news for the authenticated student', 'user', { parameters: [...page, q('q', { type: 'string' }), q('filter', { enum: ['all', 'unseen', 'bookmarks', 'events', 'pinned', 'documents'] })] }],
   ['get', '/feed/events', 'Feed (students)', 'Upcoming and ongoing events', 'user', { parameters: [q('from', { type: 'string', format: 'date-time' }), q('to', { type: 'string', format: 'date-time' })] }],
   ['get', '/feed/{id}', 'Feed (students)', 'One visible news item', 'user', { parameters: [idParam] }],
@@ -87,7 +87,7 @@ const routes = [
 ];
 
 const ROLE_TEXT = {
-  public: 'Public.', any: 'Any authenticated account.', user: 'Students only.', staff: 'Staff only.', owner: 'Staff with the owner role only.',
+  public: 'Public.', any: 'Any authenticated account.', user: 'Students only.', staff: 'Staff only. Department admins are limited to their department; for students, to the classes of their department (no class change, no deletion).', owner: 'Staff with the owner role only.',
 };
 
 const paths = {};

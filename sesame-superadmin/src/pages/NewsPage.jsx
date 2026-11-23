@@ -6,6 +6,7 @@ import { cleanParams, useUrlState } from '../lib/useUrlState';
 import { formatBytes, formatDate, formatDateTime, fromLocalInput, toLocalInput } from '../lib/format';
 import Icon from '../components/Icon';
 import { RichText } from '../lib/richText';
+import { useAuth } from '../auth/AuthContext';
 import {
   Badge, Button, Checkbox, EmptyState, ErrorBlock, Modal, PageHeader, Pagination, SearchInput, SelectField, Skeleton,
   TextField, useConfirm, useToast,
@@ -105,7 +106,7 @@ function NewsForm({ news, onClose }) {
   const submit = (event) => {
     event.preventDefault();
     setError('');
-    if (!form.audienceAll && !form.categoryIds.length) { setError('Choisissez au moins une catégorie ou rendez l’actualité visible par tous'); return; }
+    if (!form.audienceAll && !form.categoryIds.length) { setError('Choisissez au moins une classe ou rendez l’actualité visible par tous'); return; }
     if (form.eventEnd && !form.eventStart) { setError('Indiquez la date de début de l’événement'); return; }
     if (form.eventStart && form.eventEnd && new Date(form.eventEnd) < new Date(form.eventStart)) { setError('La fin de l’événement doit être après le début'); return; }
     save.mutate();
@@ -167,13 +168,13 @@ function NewsForm({ news, onClose }) {
           <legend className="label" style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-soft)', marginBottom: 6 }}>Audience</legend>
           <Checkbox label="Visible par tous les étudiants" checked={form.audienceAll} onChange={(event) => set({ audienceAll: event.target.checked })} />
           {!form.audienceAll ? (
-            <div className="chips" role="group" aria-label="Catégories ciblées">
+            <div className="chips" role="group" aria-label="Classes ciblées">
               {categories.data?.map((category) => (
                 <button key={category.id} type="button" className="chip-toggle" aria-pressed={form.categoryIds.includes(category.id)} onClick={() => toggleCategory(category.id)}>
                   {category.libelle}
                 </button>
               ))}
-              {categories.data?.length === 0 ? <span className="muted small">Aucune catégorie : créez-en dans « Catégories ».</span> : null}
+              {categories.data?.length === 0 ? <span className="muted small">Aucune classe : créez-en dans « Classes ».</span> : null}
             </div>
           ) : null}
         </fieldset>
@@ -232,7 +233,7 @@ function NewsForm({ news, onClose }) {
   );
 }
 
-function NewsCard({ news, onEdit, onDelete, onView }) {
+function NewsCard({ news, onEdit, onDelete, onView, canEdit }) {
   const state = newsState(news);
   const cover = news.media.find((media) => media.kind === 'image');
   return (
@@ -264,14 +265,19 @@ function NewsCard({ news, onEdit, onDelete, onView }) {
       <div className="footer">
         <span className="muted small">{formatDate(news.createdAt)}{news.author ? ` · ${news.author.name}` : ''} · <Icon name="eye" size={12} /> {news.viewCount ?? 0} vue{news.viewCount > 1 ? 's' : ''}</span>
         <span className="spacer" />
-        <Button variant="ghost" size="sm" icon="edit" onClick={() => onEdit(news)}>Modifier</Button>
-        <Button variant="danger-ghost" size="sm" icon="trash" aria-label={`Supprimer « ${news.titre} »`} onClick={() => onDelete(news)} />
+        {canEdit ? (
+          <>
+            <Button variant="ghost" size="sm" icon="edit" onClick={() => onEdit(news)}>Modifier</Button>
+            <Button variant="danger-ghost" size="sm" icon="trash" aria-label={`Supprimer « ${news.titre} »`} onClick={() => onDelete(news)} />
+          </>
+        ) : null}
       </div>
     </article>
   );
 }
 
 export default function NewsPage() {
+  const { isOwner } = useAuth();
   const queryClient = useQueryClient();
   const confirm = useConfirm();
   const toast = useToast();
@@ -298,7 +304,11 @@ export default function NewsPage() {
 
   return (
     <>
-      <PageHeader title="Actualités" description="Annonces, événements et documents publiés dans l’application étudiante." actions={<Button icon="plus" onClick={() => setEditing('new')}>Nouvelle actualité</Button>} />
+      <PageHeader
+        title="Actualités"
+        description={isOwner ? 'Annonces, événements et documents publiés dans l’application étudiante.' : 'Consultation seule : seul le super administrateur publie, modifie ou supprime les actualités.'}
+        actions={isOwner ? <Button icon="plus" onClick={() => setEditing('new')}>Nouvelle actualité</Button> : null}
+      />
       <div className="toolbar">
         <SearchInput value={filters.q} onChange={(q) => setFilters({ q })} placeholder="Titre ou contenu" label="Rechercher une actualité" />
         <select className="select" aria-label="État" value={filters.status} onChange={(event) => setFilters({ status: event.target.value })}>
@@ -308,7 +318,7 @@ export default function NewsPage() {
           <option value="draft">Brouillons</option>
           <option value="expired">Expirées</option>
         </select>
-        <select className="select" aria-label="Catégorie" value={filters.categorieId} onChange={(event) => setFilters({ categorieId: event.target.value })}>
+        <select className="select" aria-label="Classe" value={filters.categorieId} onChange={(event) => setFilters({ categorieId: event.target.value })}>
           <option value="">Toutes les audiences</option>
           {categories.data?.map((category) => <option key={category.id} value={category.id}>{category.libelle}</option>)}
         </select>
@@ -319,13 +329,13 @@ export default function NewsPage() {
       {news.data && !news.data.content.length ? (
         <div className="card">
           <EmptyState icon="news" title="Aucune actualité" description={filters.q || filters.status ? 'Aucun résultat pour ces filtres.' : 'Publiez la première annonce pour les étudiants.'}
-            action={<Button icon="plus" onClick={() => setEditing('new')}>Nouvelle actualité</Button>} />
+            action={isOwner ? <Button icon="plus" onClick={() => setEditing('new')}>Nouvelle actualité</Button> : null} />
         </div>
       ) : null}
       {news.data?.content.length ? (
         <>
           <div className="grid grid-cards">
-            {news.data.content.map((item) => <NewsCard key={item.id} news={item} onEdit={setEditing} onDelete={remove} onView={setViewing} />)}
+            {news.data.content.map((item) => <NewsCard key={item.id} news={item} onEdit={setEditing} onDelete={remove} onView={setViewing} canEdit={isOwner} />)}
           </div>
           <div className="card" style={{ marginTop: 16 }}>
             <Pagination page={filters.page} totalPages={news.data.totalPages} totalElements={news.data.totalElements} label="actualités" onChange={(page) => setFilters({ page }, { resetPage: false })} />

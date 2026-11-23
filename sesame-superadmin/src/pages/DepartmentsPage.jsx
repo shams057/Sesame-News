@@ -48,7 +48,7 @@ export default function DepartmentsPage() {
     <>
       <PageHeader title="Services" description="Services auxquels les étudiants adressent leurs tickets. Un agent rattaché à un service ne voit que sa file."
         actions={isOwner ? <Button icon="plus" onClick={() => setEditing('new')}>Nouveau service</Button> : null} />
-      {!isOwner ? <div className="alert alert-info" style={{ marginBottom: 16 }}>Seuls les administrateurs principaux peuvent modifier les services.</div> : null}
+      {!isOwner ? <div className="alert alert-info" style={{ marginBottom: 16 }}>Seul le super administrateur peut modifier les services.</div> : null}
       <div className="card">
         {departments.isError ? <div className="card-body"><ErrorBlock error={errorMessage(departments.error)} onRetry={departments.refetch} /></div> : null}
         {departments.isPending ? <Skeleton rows={6} /> : null}

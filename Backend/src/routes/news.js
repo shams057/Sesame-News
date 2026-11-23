@@ -13,6 +13,10 @@ const { notFound, badRequest } = require('../utils/errors');
 const router = express.Router();
 router.use(requireRole('superadmin'));
 
+// Department admins can read news but only the super admin can publish,
+// edit or delete them.
+const ownerOnly = requireRole('superadmin', { owner: true });
+
 /** Multipart forms send arrays as JSON strings or repeated fields. */
 const idList = z.union([z.array(z.coerce.number().int().positive()), z.string()]).optional().transform((value, ctx) => {
   if (value === undefined) return undefined;
@@ -119,7 +123,7 @@ async function addMedia(newsId, files, startPosition, transaction) {
 }
 
 /** POST /api/v1/news — multipart; attachments in the `files` field (max 10). */
-router.post('/', newsMediaUpload.array('files', 10), async (req, res) => {
+router.post('/', ownerOnly, newsMediaUpload.array('files', 10), async (req, res) => {
   try {
     const { removeMediaIds: _ignored, categoryIds = [], ...data } = newsBody.parse(req.body ?? {});
     checkConsistency({ ...data, categoryIds });
@@ -142,7 +146,7 @@ router.post('/', newsMediaUpload.array('files', 10), async (req, res) => {
  * PATCH /api/v1/news/:id — multipart; new files are appended, ids listed
  * in `removeMediaIds` are deleted (from the database and the disk).
  */
-router.patch('/:id', newsMediaUpload.array('files', 10), async (req, res) => {
+router.patch('/:id', ownerOnly, newsMediaUpload.array('files', 10), async (req, res) => {
   let removed = [];
   try {
     const { id } = idParam.parse(req.params);
@@ -174,7 +178,7 @@ router.patch('/:id', newsMediaUpload.array('files', 10), async (req, res) => {
   }
 });
 
-router.delete('/:id', validate({ params: idParam }), async (req, res) => {
+router.delete('/:id', ownerOnly, validate({ params: idParam }), async (req, res) => {
   const news = await News.findByPk(req.valid.params.id, { include: [{ model: NewsMedia, as: 'media' }] });
   if (!news) throw notFound('Actualité introuvable');
   const files = news.media.map((media) => media.path);

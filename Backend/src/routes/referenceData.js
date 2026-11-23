@@ -2,35 +2,39 @@
 
 const express = require('express');
 const { fn, col } = require('sequelize');
-const { validate, z, idParam } = require('../middleware/validate');
+const { validate, z, idParam, optionalId } = require('../middleware/validate');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { Categorie, Department, User, NewsCategorie, Ticket } = require('../models');
 const { notFound, conflict } = require('../utils/errors');
 
 // ─── Categories (student groups used to target news) ────────────────────────
 const categories = express.Router();
-const categoryBody = z.object({ libelle: z.string().trim().min(1).max(100) });
+// Student classes; each belongs to a department whose admins manage its students.
+const categoryBody = z.object({ libelle: z.string().trim().min(1).max(100), departmentId: optionalId });
+const categoryOwner = requireRole('superadmin', { owner: true });
 
 categories.get('/', requireAuth, async (req, res) => {
-  const rows = await Categorie.findAll({ order: [['libelle', 'ASC']] });
+  const rows = await Categorie.findAll({ include: [{ model: Department, as: 'department', attributes: ['id', 'name'] }], order: [['libelle', 'ASC']] });
   if (req.auth.role !== 'superadmin') return res.json(rows.map(({ id, libelle }) => ({ id, libelle })));
   const counts = await User.findAll({ attributes: ['categorieId', [fn('COUNT', col('id')), 'count']], group: ['categorieId'], raw: true });
   const byCategory = new Map(counts.map((row) => [row.categorieId, Number(row.count)]));
-  return res.json(rows.map(({ id, libelle, createdAt }) => ({ id, libelle, createdAt, userCount: byCategory.get(id) || 0 })));
+  return res.json(rows.map(({ id, libelle, createdAt, department }) => ({
+    id, libelle, createdAt, userCount: byCategory.get(id) || 0, department: department ? { id: department.id, name: department.name } : null,
+  })));
 });
 
-categories.post('/', requireRole('superadmin'), validate({ body: categoryBody }), async (req, res) => {
+categories.post('/', categoryOwner, validate({ body: categoryBody }), async (req, res) => {
   res.status(201).json(await Categorie.create(req.valid.body));
 });
 
-categories.patch('/:id', requireRole('superadmin'), validate({ params: idParam, body: categoryBody }), async (req, res) => {
+categories.patch('/:id', categoryOwner, validate({ params: idParam, body: categoryBody.partial() }), async (req, res) => {
   const category = await Categorie.findByPk(req.valid.params.id);
   if (!category) throw notFound('Catégorie introuvable');
   res.json(await category.update(req.valid.body));
 });
 
 /** Refuses to delete a category still used by students or news (never cascades). */
-categories.delete('/:id', requireRole('superadmin'), validate({ params: idParam }), async (req, res) => {
+categories.delete('/:id', categoryOwner, validate({ params: idParam }), async (req, res) => {
   const category = await Categorie.findByPk(req.valid.params.id);
   if (!category) throw notFound('Catégorie introuvable');
   const [users, news] = await Promise.all([

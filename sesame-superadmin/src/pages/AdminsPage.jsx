@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import api, { errorMessage } from '../lib/api';
-import { useAdmins, useDepartments } from '../lib/queries';
+import { useAdmins, useCategories, useDepartments } from '../lib/queries';
 import { formatRelative } from '../lib/format';
 import { useAuth } from '../auth/AuthContext';
 import { Badge, Button, Checkbox, ErrorBlock, Modal, PageHeader, SelectField, Skeleton, TextField, useConfirm, useToast } from '../components/ui';
@@ -10,6 +10,7 @@ function AdminForm({ admin, onClose }) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const departments = useDepartments();
+  const categories = useCategories();
   const [form, setForm] = useState({
     login: admin?.login || '',
     displayName: admin?.displayName || '',
@@ -37,14 +38,20 @@ function AdminForm({ admin, onClose }) {
         <TextField label="Nom affiché" value={form.displayName} required maxLength={100} onChange={(event) => set({ displayName: event.target.value })} hint="Visible par les étudiants dans les réponses." />
         <TextField className="full" label={admin ? 'Nouveau mot de passe (optionnel)' : 'Mot de passe'} type="password" autoComplete="new-password" minLength={8} required={!admin}
           value={form.password} onChange={(event) => set({ password: event.target.value })} hint="8 caractères minimum. Le changer déconnecte ses sessions." />
-        <SelectField label="Rôle" value={form.role} onChange={(event) => set({ role: event.target.value })} hint="Principal : gère l’équipe, les services et les suppressions.">
-          <option value="agent">Agent</option>
-          <option value="owner">Administrateur principal</option>
+        <SelectField label="Rôle" value={form.role} onChange={(event) => set({ role: event.target.value })} hint="Super administrateur : toutes les actions. Administrateur de service : uniquement ce qui concerne son service.">
+          <option value="agent">Administrateur de service</option>
+          <option value="owner">Super administrateur</option>
         </SelectField>
         <SelectField label="Service" value={form.departmentId} onChange={(event) => set({ departmentId: event.target.value })} hint="Restreint la file de tickets à ce service.">
           <option value="">Tous les services</option>
           {departments.data?.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
         </SelectField>
+        {form.role === 'agent' ? (
+          <p className="full muted small">
+            Classes gérées : {(categories.data || []).filter((c) => c.department?.id === Number(form.departmentId)).map((c) => c.libelle).join(', ') || 'aucune (ce service ne gère pas d’étudiants)'}.
+            Les classes sont rattachées aux départements dans « Classes ».
+          </p>
+        ) : null}
         {admin ? <div className="full"><Checkbox label="Compte actif" checked={form.isActive} onChange={(event) => set({ isActive: event.target.checked })} /></div> : null}
         {error ? <div className="full alert alert-error" role="alert">{error}</div> : null}
       </form>
@@ -53,6 +60,7 @@ function AdminForm({ admin, onClose }) {
 }
 
 export default function AdminsPage() {
+  const categories = useCategories();
   const { account, isOwner } = useAuth();
   const admins = useAdmins();
   const queryClient = useQueryClient();
@@ -80,15 +88,16 @@ export default function AdminsPage() {
           <div className="table-wrap">
             <table className="table">
               <thead>
-                <tr><th scope="col">Nom</th><th scope="col">Identifiant</th><th scope="col">Rôle</th><th scope="col">Service</th><th scope="col">Dernière connexion</th>{isOwner ? <th scope="col" className="actions">Actions</th> : null}</tr>
+                <tr><th scope="col">Nom</th><th scope="col">Identifiant</th><th scope="col">Rôle</th><th scope="col">Service</th><th scope="col">Classes gérées</th><th scope="col">Dernière connexion</th>{isOwner ? <th scope="col" className="actions">Actions</th> : null}</tr>
               </thead>
               <tbody>
                 {admins.data.map((admin) => (
                   <tr key={admin.id}>
                     <td><strong>{admin.displayName || admin.login}</strong>{admin.id === account.id ? <span className="muted"> (vous)</span> : null}{!admin.isActive ? <> <Badge tone="danger">Désactivé</Badge></> : null}</td>
                     <td className="mono">{admin.login}</td>
-                    <td>{admin.role === 'owner' ? <Badge tone="info">Principal</Badge> : <Badge>Agent</Badge>}</td>
+                    <td>{admin.role === 'owner' ? <Badge tone="info">Super admin</Badge> : <Badge>Admin de service</Badge>}</td>
                     <td>{admin.department?.name || <span className="muted">Tous</span>}</td>
+                    <td>{admin.role === 'owner' ? <span className="muted">Tous</span> : (categories.data || []).filter((c) => admin.department && c.department?.id === admin.department.id).map((c) => c.libelle.split(' (')[0]).join(', ') || <span className="muted">—</span>}</td>
                     <td>{admin.lastLoginAt ? formatRelative(admin.lastLoginAt) : <span className="muted">Jamais</span>}</td>
                     {isOwner ? (
                       <td className="actions">

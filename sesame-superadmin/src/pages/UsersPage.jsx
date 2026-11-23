@@ -4,6 +4,7 @@ import api, { downloadFile, errorMessage } from '../lib/api';
 import { get, useCategories } from '../lib/queries';
 import { cleanParams, useUrlState } from '../lib/useUrlState';
 import { formatRelative } from '../lib/format';
+import { useAuth } from '../auth/AuthContext';
 import {
   Badge, Button, EmptyState, ErrorBlock, Modal, PageHeader, Pagination, SearchInput, SecretValue,
   SelectField, Skeleton, TextField, useConfirm, useToast,
@@ -13,12 +14,15 @@ function UserForm({ user, onClose, onCreated }) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const categories = useCategories();
+  const { isOwner, account } = useAuth();
+  const managed = account.managedCategories || [];
   const [form, setForm] = useState({
     firstname: user?.firstname || '',
     lastname: user?.lastname || '',
     login: user?.login || '',
     email: user?.email || '',
-    categorieId: user?.categorie?.id || '',
+    // A department admin's students always stay in the admin's category.
+    categorieId: user?.categorie?.id || (!isOwner && managed.length === 1 ? managed[0].id : ''),
   });
   const [error, setError] = useState('');
   const set = (changes) => setForm((current) => ({ ...current, ...changes }));
@@ -48,9 +52,10 @@ function UserForm({ user, onClose, onCreated }) {
         <TextField label="Identifiant de connexion" value={form.login} maxLength={100} minLength={3} required pattern="[\w.@\-]+" title="Lettres, chiffres, . _ - @"
           autoComplete="off" onChange={(event) => set({ login: event.target.value })} />
         <TextField label="E-mail (optionnel)" type="email" value={form.email} maxLength={255} onChange={(event) => set({ email: event.target.value })} />
-        <SelectField label="Catégorie" value={form.categorieId} onChange={(event) => set({ categorieId: event.target.value })} hint="Détermine les actualités ciblées qu’il reçoit.">
-          <option value="">Aucune</option>
-          {categories.data?.map((category) => <option key={category.id} value={category.id}>{category.libelle}</option>)}
+        <SelectField label="Classe" value={form.categorieId} disabled={!isOwner && Boolean(user)} required={!isOwner} onChange={(event) => set({ categorieId: event.target.value })}
+          hint={isOwner ? 'Détermine les actualités ciblées qu’il reçoit.' : user ? 'Seul le super administrateur peut changer la classe.' : 'Une des classes de votre département.'}>
+          <option value="">{isOwner ? 'Aucune' : 'Choisir une classe'}</option>
+          {(isOwner ? categories.data || [] : managed).map((category) => <option key={category.id} value={category.id}>{category.libelle}</option>)}
         </SelectField>
         {!user ? <p className="full muted small">Un mot de passe temporaire sera généré ; l’étudiant devra le changer à sa première connexion.</p> : null}
         {error ? <div className="full alert alert-error" role="alert">{error}</div> : null}
@@ -76,6 +81,7 @@ function credentialsCsv(credentials) {
 }
 
 function ImportModal({ onClose }) {
+  const { isOwner, account } = useAuth();
   const queryClient = useQueryClient();
   const toast = useToast();
   const [file, setFile] = useState(null);
@@ -127,6 +133,7 @@ function ImportModal({ onClose }) {
       {!result ? (
         <>
           <p>Colonnes attendues (ligne d’en-tête) : <code>firstname, lastname, login, email, categorie</code>. Séparateur <code>,</code> ou <code>;</code>. <code>email</code> et <code>categorie</code> (libellé) sont optionnels.</p>
+          {!isOwner ? <div className="alert alert-info">La colonne <code>categorie</code> doit contenir une de vos classes ({account.managedCategories?.map((c) => c.libelle.split(' (')[0]).join(', ')}) ; elle peut être omise si vous n’en gérez qu’une. Le code court (ex. <code>LIM</code>) suffit.</div> : null}
           <div className="row">
             <Button variant="secondary" icon="download" onClick={() => downloadFile('/users/import/template', 'modele.csv').catch((e) => toast.error(errorMessage(e)))}>Télécharger le modèle</Button>
             <label className="btn btn-secondary" htmlFor="csv-file">Choisir un fichier</label>
@@ -166,6 +173,8 @@ function ImportModal({ onClose }) {
 }
 
 export default function UsersPage() {
+  const { isOwner, account } = useAuth();
+  const managed = account.managedCategories || [];
   const queryClient = useQueryClient();
   const confirm = useConfirm();
   const toast = useToast();
@@ -235,19 +244,32 @@ export default function UsersPage() {
     <button type="button" className="sort" onClick={() => setFilters({ sort: key })} aria-pressed={filters.sort === key}>{label}{filters.sort === key ? ' ↓' : ''}</button>
   );
 
+  if (!isOwner && !managed.length) {
+    return (
+      <>
+        <PageHeader title="Étudiants" description="Comptes de l’application étudiante." />
+        <div className="card">
+          <EmptyState icon="users" title="Aucune classe gérée" description="Votre service n’a pas de classes d’étudiants. Seuls les départements (ING, FTA, Informatique, Management) gèrent des étudiants." />
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <PageHeader
         title="Étudiants"
-        description="Comptes de l’application étudiante."
+        description={isOwner ? 'Comptes de l’application étudiante.' : `Étudiants de vos classes : ${managed.map((c) => c.libelle.split(' (')[0]).join(', ')}.`}
         actions={<><Button variant="secondary" icon="upload" onClick={() => setImporting(true)}>Importer un CSV</Button><Button icon="plus" onClick={() => setEditing('new')}>Nouvel étudiant</Button></>}
       />
       <div className="toolbar">
         <SearchInput value={filters.q} onChange={(q) => setFilters({ q })} placeholder="Nom, login ou e-mail" label="Rechercher un étudiant" />
-        <select className="select" aria-label="Catégorie" value={filters.categorieId} onChange={(event) => setFilters({ categorieId: event.target.value })}>
-          <option value="">Toutes les catégories</option>
-          {categories.data?.map((category) => <option key={category.id} value={category.id}>{category.libelle}</option>)}
-        </select>
+        {isOwner || managed.length > 1 ? (
+          <select className="select" aria-label="Classe" value={filters.categorieId} onChange={(event) => setFilters({ categorieId: event.target.value })}>
+            <option value="">Toutes les classes</option>
+            {(isOwner ? categories.data || [] : managed).map((category) => <option key={category.id} value={category.id}>{category.libelle}</option>)}
+          </select>
+        ) : null}
         <select className="select" aria-label="État du compte" value={filters.status} onChange={(event) => setFilters({ status: event.target.value })}>
           <option value="">Tous les comptes</option>
           <option value="active">Actifs</option>
@@ -265,11 +287,15 @@ export default function UsersPage() {
             <strong>{selected.size} sélectionné(s)</strong>
             <Button variant="secondary" size="sm" icon="check" onClick={() => bulk('activate')}>Activer</Button>
             <Button variant="secondary" size="sm" icon="lock" onClick={() => bulk('deactivate')}>Désactiver</Button>
-            <select className="select" aria-label="Catégorie à appliquer" value={bulkCategory} onChange={(event) => setBulkCategory(event.target.value)}>
-              <option value="">Aucune catégorie</option>
-              {categories.data?.map((category) => <option key={category.id} value={category.id}>{category.libelle}</option>)}
-            </select>
-            <Button variant="secondary" size="sm" onClick={() => bulk('setCategory')}>Appliquer la catégorie</Button>
+            {isOwner ? (
+              <>
+                <select className="select" aria-label="Classe à appliquer" value={bulkCategory} onChange={(event) => setBulkCategory(event.target.value)}>
+                  <option value="">Aucune classe</option>
+                  {categories.data?.map((category) => <option key={category.id} value={category.id}>{category.libelle}</option>)}
+                </select>
+                <Button variant="secondary" size="sm" onClick={() => bulk('setCategory')}>Appliquer la classe</Button>
+              </>
+            ) : null}
             <span className="spacer" />
             <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>Tout désélectionner</Button>
           </div>
@@ -282,7 +308,7 @@ export default function UsersPage() {
                   <th scope="col"><input type="checkbox" aria-label="Sélectionner toute la page" checked={allSelected} onChange={toggleAll} /></th>
                   <th scope="col">{sortHeader('name', 'Nom')}</th>
                   <th scope="col">{sortHeader('login', 'Login')}</th>
-                  <th scope="col">Catégorie</th>
+                  <th scope="col">Classe</th>
                   <th scope="col">État</th>
                   <th scope="col">{sortHeader('-lastLoginAt', 'Dernière connexion')}</th>
                   <th scope="col" className="actions">Actions</th>
@@ -304,7 +330,7 @@ export default function UsersPage() {
                       <Button variant="ghost" size="sm" icon="edit" aria-label={`Modifier ${user.login}`} onClick={() => setEditing(user)} />
                       <Button variant="ghost" size="sm" icon="key" aria-label={`Réinitialiser le mot de passe de ${user.login}`} title="Réinitialiser le mot de passe" onClick={() => resetPassword(user)} />
                       <Button variant="ghost" size="sm" icon={user.isActive ? 'lock' : 'check'} aria-label={user.isActive ? `Désactiver ${user.login}` : `Réactiver ${user.login}`} title={user.isActive ? 'Désactiver' : 'Réactiver'} onClick={() => toggleActive(user)} />
-                      <Button variant="danger-ghost" size="sm" icon="trash" aria-label={`Supprimer ${user.login}`} title="Supprimer" onClick={() => remove(user)} />
+                      {isOwner ? <Button variant="danger-ghost" size="sm" icon="trash" aria-label={`Supprimer ${user.login}`} title="Supprimer" onClick={() => remove(user)} /> : null}
                     </td>
                   </tr>
                 ))}

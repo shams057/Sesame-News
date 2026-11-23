@@ -26,9 +26,11 @@ const rowSchema = z.object({
  * firstname, lastname, login, email?, categorie? (label or id).
  * No password column is read: every imported student gets a generated
  * temporary password (returned once) and must change it at first login.
+ * `allowedCategoryIds` (department admins): rows must target one of these
+ * classes; the column may be omitted when the admin has a single class.
  * Valid rows are inserted in one transaction; invalid rows are reported.
  */
-async function importUsers(buffer) {
+async function importUsers(buffer, { allowedCategoryIds = null } = {}) {
   let records;
   try {
     const text = buffer.toString('utf8');
@@ -52,6 +54,8 @@ async function importUsers(buffer) {
   categories.forEach((category) => {
     categoryByKey.set(String(category.id), category.id);
     categoryByKey.set(category.libelle.toLowerCase(), category.id);
+    // Short code accepted too: « LIM » for « LIM (Licence Informatique Multimédia) ».
+    categoryByKey.set(category.libelle.split(' (')[0].trim().toLowerCase(), category.id);
   });
 
   const logins = records.map((record) => String(record.login || '').trim()).filter(Boolean);
@@ -75,7 +79,12 @@ async function importUsers(buffer) {
     let categorieId = null;
     if (row.categorie) {
       categorieId = categoryByKey.get(row.categorie.toLowerCase()) ?? null;
-      if (!categorieId) { errors.push({ line, login: row.login, error: `catégorie inconnue « ${row.categorie} »` }); return; }
+      if (!categorieId) { errors.push({ line, login: row.login, error: `classe inconnue « ${row.categorie} »` }); return; }
+    }
+    if (allowedCategoryIds) {
+      if (!categorieId && allowedCategoryIds.length === 1) [categorieId] = allowedCategoryIds;
+      if (!categorieId) { errors.push({ line, login: row.login, error: 'classe obligatoire' }); return; }
+      if (!allowedCategoryIds.includes(categorieId)) { errors.push({ line, login: row.login, error: `classe « ${row.categorie} » hors de votre service` }); return; }
     }
     seen.add(key);
     valid.push({ ...row, categorieId });
